@@ -28,8 +28,8 @@
 #include "user_vcom.h"
 #include "EEPROM.h"
 
-
-#define USECDC
+// defines whether to use debuguart or CDC for the uart connection.
+//#define USECDC
 // TODO: insert other include files here
 
 // TODO: insert other definitions and declarations here
@@ -44,14 +44,19 @@ void vConfigureTimerForRunTimeStats( void ) {
 
 }
 
+static void vGCode( const char * gcode);
+
 SemaphoreHandle_t xUARTMutex;
 
 LpcUart * uart;
 
 EEPROM * EEProm;
 
-QueueHandle_t xParseQueue;
+// more useful for parse output than input..
+//QueueHandle_t xParseQueue;
 
+
+// just a function to putput the OK message for MDRAW as it's used for multiple responses.
 void printOK()
 {
 	char okmsg[]="OK\r\n";
@@ -66,7 +71,6 @@ void printOK()
 }
 
 #define INPUTMAXLEN (80)
-
 
 #ifdef USECDC
 static void vUSBInput(void *pvParameters)
@@ -149,7 +153,9 @@ static void vUSBInput(void *pvParameters)
 				continue;
 			}
 
-			xQueueSendToBack( xParseQueue, inputstr, portMAX_DELAY );
+			vGCode(inputstr);
+
+//			xQueueSendToBack( xParseQueue, inputstr, portMAX_DELAY );
 
 			inputpos=0;
 			inputstr[0] = 0;
@@ -172,7 +178,7 @@ static void vUARTInTask(void *pvParameters)
 	while (1) {
 		// just to be on safe side then.
 		char ch = 0;
-		int read = uart->readblock(ch);
+		int read = uart->read(ch); // block was hanging unexpectedly.
 
 		// didn't receive a char, skip.
 		if ( read == 0 )
@@ -208,11 +214,12 @@ static void vUARTInTask(void *pvParameters)
 			uart->write("\r\n");
 			xSemaphoreGive(xUARTMutex);
 
-			ITM_write(inputstr);
-			ITM_write("\r\n");
+//			ITM_write(inputstr);
+//			ITM_write("\r\n");
 
 			if ( inputstr[0] != 0 )
-				xQueueSendToBack( xParseQueue, inputstr, portMAX_DELAY );
+				vGCode(inputstr);
+//				xQueueSendToBack( xParseQueue, inputstr, portMAX_DELAY );
 
 			charcount = 0;
 			inputstr[0] = 0;
@@ -231,7 +238,7 @@ void printGCode( const char * output )
 	uart->write(output);
 	xSemaphoreGive(xUARTMutex);
 #endif
-//	ITM_write(output);
+	ITM_write(output);
 }
 
 
@@ -254,15 +261,18 @@ char * numstr( uint32_t num )
 		return &numstrint[i];
 }
 
-static void vGCode(void *pvParameters) {
+// was previously setup as a seperate task, but doesn't seem much need for that
+static void vGCode( const char * input) {
 
 	char gcode[INPUTMAXLEN+1] = "";
 
-	while (1) {
-		xQueueReceive(xParseQueue, gcode, portMAX_DELAY);
+//	while (1)
+	{
+//		xQueueReceive(xParseQueue, gcode, portMAX_DELAY);
 
+		ITM_write(input);
 		uint32_t starttick = DWT->CYCCNT;
-	    command parsed = GCodeParser(gcode);
+	    command parsed = GCodeParser(input);
 	    uint32_t ticktime = DWT->CYCCNT - starttick;
 #ifdef USESPRINT
 	    snprintf(gcode, 79, "Gcode parse took %ld cycles\r\n", ticktime);
@@ -278,7 +288,8 @@ static void vGCode(void *pvParameters) {
 // messages expecting explicit reply rather than OK, or data saving.
 			case init:
 
-// saves a bit of stack space not using full sprintf formatting function. Harder work though.
+// saves a bit of stack space not using full sprintf formatting function.
+//	Harder work to write output though, but as this is only complex output needed...
 #ifndef USESPRINT
 			    strcpy(gcode, "M10 XY ");
 			    strcat(gcode, numstr( EEProm->getXSize() ));
@@ -286,13 +297,13 @@ static void vGCode(void *pvParameters) {
 			    strcat(gcode, numstr( EEProm->getYSize() ));
 			    strcat(gcode, " 0.00 0.00 A");
 			    strcat(gcode, numstr( EEProm->getXDir() ));
-			    strcat(gcode, "  B");
+			    strcat(gcode, " B");
 			    strcat(gcode, numstr( EEProm->getYDir() ));
-			    strcat(gcode, "  H0 S");
+			    strcat(gcode, " H0 S");
 			    strcat(gcode, numstr( EEProm->getSpeed() ));
-			    strcat(gcode, "  U");
+			    strcat(gcode, " U");
 			    strcat(gcode, numstr( EEProm->getPUp() ));
-			    strcat(gcode, "  D");
+			    strcat(gcode, " D");
 				strcat(gcode, numstr( EEProm->getPDown() ));
 				strcat(gcode, " \r\n");
 #else
@@ -310,16 +321,16 @@ static void vGCode(void *pvParameters) {
 				printOK();
 				break;
 			case limit:
-				printGCode("M11 1 1 1 1\r\n"); // fake limit switch reading.
+				printGCode("M11 1 1 1 1\r\n"); // fake limit switch reporting for now..
 				printOK();
 				break;
-			case savepen:
+			case savepen: // request to save new pen up/down positions.
 				EEProm->setPen(parsed.penstore.up, parsed.penstore.down);
 				ITM_write("Pen data saved.\n");
 				printOK();
 				break;
 
-			case savestepper:
+			case savestepper: // request to save new drawing area sizes/speed/etc.
 				EEProm->setStepper(parsed.stepper.A,
 						parsed.stepper.B,
 						parsed.stepper.width,
@@ -386,8 +397,8 @@ int main(void) {
 
 	xUARTMutex = xSemaphoreCreateMutex();
 
-    xParseQueue = xQueueCreate( 5, sizeof( char[INPUTMAXLEN+1] ) );
-    vQueueAddToRegistry( xParseQueue, "Parser input Queue" );
+ //   xParseQueue = xQueueCreate( 5, sizeof( char[INPUTMAXLEN+1] ) );
+ //   vQueueAddToRegistry( xParseQueue, "Parser input Queue" );
 
 #ifdef USECDC
 	/* low level USB communicationthread */
@@ -396,17 +407,19 @@ int main(void) {
 				(TaskHandle_t *) NULL);
 	// higher level usb uart input
 	xTaskCreate(vUSBInput, "USB In",
-				100, NULL, (tskIDLE_PRIORITY + 3UL),
+				200, NULL, (tskIDLE_PRIORITY + 3UL),
 				(TaskHandle_t *) NULL);
 #else
 	xTaskCreate(vUARTInTask, "vUARTTask",
-				configMINIMAL_STACK_SIZE*5, NULL, (tskIDLE_PRIORITY + 8UL),
+				200, NULL, (tskIDLE_PRIORITY + 8UL),
 				(TaskHandle_t *) NULL);
 #endif
 
+/*
 	xTaskCreate(vGCode, "GCode Parser",
 				200, NULL, (tskIDLE_PRIORITY + 3UL),
 				(TaskHandle_t *) NULL);
+*/
 
 	vTaskStartScheduler();
 

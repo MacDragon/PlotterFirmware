@@ -9,6 +9,8 @@
 #define LPCUART_H_
 
 #include "chip.h"
+#include "FreeRTOS.h"
+#include "semphr.h"
 
 struct LpcPinMap {
 	int port; /* set to -1 to indicate unused pin */
@@ -38,7 +40,9 @@ public:
 	int  write(const char *s);
 	int  write(const char *buffer, int len);
 	int  read(char &c); /* get a single character. Returns number of characters read --> returns 0 if no character is available */
+	int  readblock( char &c);
 	int  read(char *buffer, int len);
+	int  readblock(char *buffer, int len);
 	void txbreak(bool brk); /* set break signal on */
 	bool rxbreak(); /* check if break is received */
 	void speed(int bps); /* change transmission speed */
@@ -56,6 +60,7 @@ private:
 	uint8_t rxbuff[UART_RB_SIZE];
 	uint8_t txbuff[UART_RB_SIZE];
 	static bool init; /* set when first UART is initialized. We have a global clock setting for all UARTSs */
+	SemaphoreHandle_t newdata;
 };
 
 #endif /* LPCUART_H_ */

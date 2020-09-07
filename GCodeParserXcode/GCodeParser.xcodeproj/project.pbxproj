@@ -44,6 +44,7 @@
 		5C2A79D424F794AE00213BF2 = {
 			isa = PBXGroup;
 			children = (
+				5C2A79E024F794AE00213BF2 /* main.cpp */,
 				5C50E31224FDB54F0078E4FB /* gparse.cpp */,
 				5C50E31324FDB54F0078E4FB /* gparse.h */,
 				5C2A79DF24F794AE00213BF2 /* GCodeParser */,
@@ -62,7 +63,6 @@
 		5C2A79DF24F794AE00213BF2 /* GCodeParser */ = {
 			isa = PBXGroup;
 			children = (
-				5C2A79E024F794AE00213BF2 /* main.cpp */,
 			);
 			path = GCodeParser;
 			sourceTree = "<group>";

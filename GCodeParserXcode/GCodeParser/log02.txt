@@ -1,0 +1,616 @@
+COM is open In/out queue size 4096/4096 Set timeouts: ReadInterval=0, ReadTotalTimeoutMultiplier=0, ReadTotalTimeoutConstant=0, WriteTotalTimeoutMultiplier=0, WriteTotalTimeoutConstant=0 Baud rate 115200 RTS on DTR on Data bits=8, Stop bits=1, Parity=None Set chars: Eof=0x00, Error=0x00, Break=0x00, Event=0x00, Xon=0x11, Xoff=0x13 Handflow: ControlHandShake=(DTR_CONTROL), FlowReplace=(TRANSMIT_TOGGLE, RTS_CONTROL), XonLimit=34412, XoffLimit=8603 Purge the serial port: RXABORT, RXCLEAR, TXABORT, TXCLEAR 
+M10
+M10 XY 380 310 0.00 0.00 A0 B0 H0 S80 U160 D90
+OK
+G28
+OK
+G1 X158.50 Y82.50 A0
+distance=178.69
+OK
+M1 90
+OK
+G1 X158.46 Y80.14 A0
+distance=2.36
+OK
+G1 X158.35 Y77.79 A0
+distance=2.35
+OK
+G1 X158.17 Y75.44 A0
+distance=2.36
+OK
+G1 X157.91 Y73.10 A0
+distance=2.35
+OK
+G1 X157.58 Y70.77 A0
+distance=2.35
+OK
+G1 X157.17 Y68.45 A0
+distance=2.36
+OK
+G1 X156.69 Y66.14 A0
+distance=2.36
+OK
+G1 X156.14 Y63.85 A0
+distance=2.36
+OK
+G1 X155.52 Y61.58 A0
+distance=2.35
+OK
+G1 X154.83 Y59.32 A0
+distance=2.36
+OK
+G1 X154.07 Y57.09 A0
+distance=2.36
+OK
+G1 X153.23 Y54.89 A0
+distance=2.35
+OK
+G1 X152.33 Y52.71 A0
+distance=2.36
+OK
+G1 X151.36 Y50.57 A0
+distance=2.35
+OK
+G1 X150.33 Y48.45 A0
+distance=2.36
+OK
+G1 X149.22 Y46.37 A0
+distance=2.36
+OK
+G1 X148.06 Y44.32 A0
+distance=2.36
+OK
+G1 X146.82 Y42.31 A0
+distance=2.36
+OK
+G1 X145.53 Y40.34 A0
+distance=2.35
+OK
+G1 X144.18 Y38.42 A0
+distance=2.35
+OK
+G1 X142.76 Y36.53 A0
+distance=2.36
+OK
+G1 X141.29 Y34.69 A0
+distance=2.36
+OK
+G1 X139.76 Y32.90 A0
+distance=2.35
+OK
+G1 X138.17 Y31.16 A0
+distance=2.36
+OK
+G1 X136.53 Y29.47 A0
+distance=2.35
+OK
+G1 X134.84 Y27.83 A0
+distance=2.35
+OK
+G1 X133.10 Y26.24 A0
+distance=2.36
+OK
+G1 X131.31 Y24.71 A0
+distance=2.35
+OK
+G1 X129.47 Y23.24 A0
+distance=2.36
+OK
+G1 X127.58 Y21.82 A0
+distance=2.36
+OK
+G1 X125.66 Y20.47 A0
+distance=2.35
+OK
+G1 X123.69 Y19.18 A0
+distance=2.35
+OK
+G1 X121.68 Y17.94 A0
+distance=2.36
+OK
+G1 X119.63 Y16.78 A0
+distance=2.36
+OK
+G1 X117.55 Y15.67 A0
+distance=2.36
+OK
+G1 X115.43 Y14.64 A0
+distance=2.36
+OK
+G1 X113.29 Y13.67 A0
+distance=2.35
+OK
+G1 X111.11 Y12.77 A0
+distance=2.36
+OK
+G1 X108.91 Y11.93 A0
+distance=2.35
+OK
+G1 X106.68 Y11.17 A0
+distance=2.36
+OK
+G1 X104.42 Y10.48 A0
+distance=2.36
+OK
+G1 X102.15 Y9.86 A0
+distance=2.35
+OK
+G1 X99.86 Y9.31 A0
+distance=2.36
+OK
+G1 X97.55 Y8.83 A0
+distance=2.36
+OK
+G1 X95.23 Y8.42 A0
+distance=2.36
+OK
+G1 X92.90 Y8.09 A0
+distance=2.35
+OK
+G1 X90.56 Y7.83 A0
+distance=2.35
+OK
+G1 X88.21 Y7.65 A0
+distance=2.36
+OK
+G1 X85.86 Y7.54 A0
+distance=2.35
+OK
+G1 X83.50 Y7.50 A0
+distance=2.36
+OK
+G1 X81.14 Y7.54 A0
+distance=2.36
+OK
+G1 X78.79 Y7.65 A0
+distance=2.35
+OK
+G1 X76.44 Y7.83 A0
+distance=2.36
+OK
+G1 X74.10 Y8.09 A0
+distance=2.35
+OK
+G1 X71.77 Y8.42 A0
+distance=2.35
+OK
+G1 X69.45 Y8.83 A0
+distance=2.36
+OK
+G1 X67.14 Y9.31 A0
+distance=2.36
+OK
+G1 X64.85 Y9.86 A0
+distance=2.36
+OK
+G1 X62.58 Y10.48 A0
+distance=2.35
+OK
+G1 X60.32 Y11.17 A0
+distance=2.36
+OK
+G1 X58.09 Y11.93 A0
+distance=2.36
+OK
+G1 X55.89 Y12.77 A0
+distance=2.35
+OK
+G1 X53.71 Y13.67 A0
+distance=2.36
+OK
+G1 X51.57 Y14.64 A0
+distance=2.35
+OK
+G1 X49.45 Y15.67 A0
+distance=2.36
+OK
+G1 X47.37 Y16.78 A0
+distance=2.36
+OK
+G1 X45.32 Y17.94 A0
+distance=2.36
+OK
+G1 X43.31 Y19.18 A0
+distance=2.36
+OK
+G1 X41.34 Y20.47 A0
+distance=2.35
+OK
+G1 X39.42 Y21.82 A0
+distance=2.35
+OK
+G1 X37.53 Y23.24 A0
+distance=2.36
+OK
+G1 X35.69 Y24.71 A0
+distance=2.36
+OK
+G1 X33.90 Y26.24 A0
+distance=2.35
+OK
+G1 X32.16 Y27.83 A0
+distance=2.36
+OK
+G1 X30.47 Y29.47 A0
+distance=2.35
+OK
+G1 X28.83 Y31.16 A0
+distance=2.35
+OK
+G1 X27.24 Y32.90 A0
+distance=2.36
+OK
+G1 X25.71 Y34.69 A0
+distance=2.35
+OK
+G1 X24.24 Y36.53 A0
+distance=2.36
+OK
+G1 X22.82 Y38.42 A0
+distance=2.36
+OK
+G1 X21.47 Y40.34 A0
+distance=2.35
+OK
+G1 X20.18 Y42.31 A0
+distance=2.35
+OK
+G1 X18.94 Y44.32 A0
+distance=2.36
+OK
+G1 X17.78 Y46.37 A0
+distance=2.36
+OK
+G1 X16.67 Y48.45 A0
+distance=2.36
+OK
+G1 X15.64 Y50.57 A0
+distance=2.36
+OK
+G1 X14.67 Y52.71 A0
+distance=2.35
+OK
+G1 X13.77 Y54.89 A0
+distance=2.36
+OK
+G1 X12.93 Y57.09 A0
+distance=2.35
+OK
+G1 X12.17 Y59.32 A0
+distance=2.36
+OK
+G1 X11.48 Y61.58 A0
+distance=2.36
+OK
+G1 X10.86 Y63.85 A0
+distance=2.35
+OK
+G1 X10.31 Y66.14 A0
+distance=2.36
+OK
+G1 X9.83 Y68.45 A0
+distance=2.36
+OK
+G1 X9.42 Y70.77 A0
+distance=2.36
+OK
+G1 X9.09 Y73.10 A0
+distance=2.35
+OK
+G1 X8.83 Y75.44 A0
+distance=2.35
+OK
+G1 X8.65 Y77.79 A0
+distance=2.36
+OK
+G1 X8.54 Y80.14 A0
+distance=2.35
+OK
+G1 X8.50 Y82.50 A0
+distance=2.36
+OK
+G1 X8.54 Y84.86 A0
+distance=2.36
+OK
+G1 X8.65 Y87.21 A0
+distance=2.35
+OK
+G1 X8.83 Y89.56 A0
+distance=2.36
+OK
+G1 X9.09 Y91.90 A0
+distance=2.35
+OK
+G1 X9.42 Y94.23 A0
+distance=2.35
+OK
+G1 X9.83 Y96.55 A0
+distance=2.36
+OK
+G1 X10.31 Y98.86 A0
+distance=2.36
+OK
+G1 X10.86 Y101.15 A0
+distance=2.36
+OK
+G1 X11.48 Y103.42 A0
+distance=2.35
+OK
+G1 X12.17 Y105.68 A0
+distance=2.36
+OK
+G1 X12.93 Y107.91 A0
+distance=2.36
+OK
+G1 X13.77 Y110.11 A0
+distance=2.35
+OK
+G1 X14.67 Y112.29 A0
+distance=2.36
+OK
+G1 X15.64 Y114.43 A0
+distance=2.35
+OK
+G1 X16.67 Y116.55 A0
+distance=2.36
+OK
+G1 X17.78 Y118.63 A0
+distance=2.36
+OK
+G1 X18.94 Y120.68 A0
+distance=2.36
+OK
+G1 X20.18 Y122.69 A0
+distance=2.36
+OK
+G1 X21.47 Y124.66 A0
+distance=2.35
+OK
+G1 X22.82 Y126.58 A0
+distance=2.35
+OK
+G1 X24.24 Y128.47 A0
+distance=2.36
+OK
+G1 X25.71 Y130.31 A0
+distance=2.36
+OK
+G1 X27.24 Y132.10 A0
+distance=2.35
+OK
+G1 X28.83 Y133.84 A0
+distance=2.36
+OK
+G1 X30.47 Y135.53 A0
+distance=2.35
+OK
+G1 X32.16 Y137.17 A0
+distance=2.35
+OK
+G1 X33.90 Y138.76 A0
+distance=2.36
+OK
+G1 X35.69 Y140.29 A0
+distance=2.35
+OK
+G1 X37.53 Y141.76 A0
+distance=2.36
+OK
+G1 X39.42 Y143.18 A0
+distance=2.36
+OK
+G1 X41.34 Y144.53 A0
+distance=2.35
+OK
+G1 X43.31 Y145.82 A0
+distance=2.35
+OK
+G1 X45.32 Y147.06 A0
+distance=2.36
+OK
+G1 X47.37 Y148.22 A0
+distance=2.36
+OK
+G1 X49.45 Y149.33 A0
+distance=2.36
+OK
+G1 X51.57 Y150.36 A0
+distance=2.36
+OK
+G1 X53.71 Y151.33 A0
+distance=2.35
+OK
+G1 X55.89 Y152.23 A0
+distance=2.36
+OK
+G1 X58.09 Y153.07 A0
+distance=2.35
+OK
+G1 X60.32 Y153.83 A0
+distance=2.36
+OK
+G1 X62.58 Y154.52 A0
+distance=2.36
+OK
+G1 X64.85 Y155.14 A0
+distance=2.35
+OK
+G1 X67.14 Y155.69 A0
+distance=2.36
+OK
+G1 X69.45 Y156.17 A0
+distance=2.36
+OK
+G1 X71.77 Y156.58 A0
+distance=2.36
+OK
+G1 X74.10 Y156.91 A0
+distance=2.35
+OK
+G1 X76.44 Y157.17 A0
+distance=2.35
+OK
+G1 X78.79 Y157.35 A0
+distance=2.36
+OK
+G1 X81.14 Y157.46 A0
+distance=2.35
+OK
+G1 X83.50 Y157.50 A0
+distance=2.36
+OK
+G1 X85.86 Y157.46 A0
+distance=2.36
+OK
+G1 X88.21 Y157.35 A0
+distance=2.35
+OK
+G1 X90.56 Y157.17 A0
+distance=2.36
+OK
+G1 X92.90 Y156.91 A0
+distance=2.35
+OK
+G1 X95.23 Y156.58 A0
+distance=2.35
+OK
+G1 X97.55 Y156.17 A0
+distance=2.36
+OK
+G1 X99.86 Y155.69 A0
+distance=2.36
+OK
+G1 X102.15 Y155.14 A0
+distance=2.36
+OK
+G1 X104.42 Y154.52 A0
+distance=2.35
+OK
+G1 X106.68 Y153.83 A0
+distance=2.36
+OK
+G1 X108.91 Y153.07 A0
+distance=2.36
+OK
+G1 X111.11 Y152.23 A0
+distance=2.35
+OK
+G1 X113.29 Y151.33 A0
+distance=2.36
+OK
+G1 X115.43 Y150.36 A0
+distance=2.35
+OK
+G1 X117.55 Y149.33 A0
+distance=2.36
+OK
+G1 X119.63 Y148.22 A0
+distance=2.36
+OK
+G1 X121.68 Y147.06 A0
+distance=2.36
+OK
+G1 X123.69 Y145.82 A0
+distance=2.36
+OK
+G1 X125.66 Y144.53 A0
+distance=2.35
+OK
+G1 X127.58 Y143.18 A0
+distance=2.35
+OK
+G1 X129.47 Y141.76 A0
+distance=2.36
+OK
+G1 X131.31 Y140.29 A0
+distance=2.36
+OK
+G1 X133.10 Y138.76 A0
+distance=2.35
+OK
+G1 X134.84 Y137.17 A0
+distance=2.36
+OK
+G1 X136.53 Y135.53 A0
+distance=2.35
+OK
+G1 X138.17 Y133.84 A0
+distance=2.35
+OK
+G1 X139.76 Y132.10 A0
+distance=2.36
+OK
+G1 X141.29 Y130.31 A0
+distance=2.35
+OK
+G1 X142.76 Y128.47 A0
+distance=2.36
+OK
+G1 X144.18 Y126.58 A0
+distance=2.36
+OK
+G1 X145.53 Y124.66 A0
+distance=2.35
+OK
+G1 X146.82 Y122.69 A0
+distance=2.35
+OK
+G1 X148.06 Y120.68 A0
+distance=2.36
+OK
+G1 X149.22 Y118.63 A0
+distance=2.36
+OK
+G1 X150.33 Y116.55 A0
+distance=2.36
+OK
+G1 X151.36 Y114.43 A0
+distance=2.36
+OK
+G1 X152.33 Y112.29 A0
+distance=2.35
+OK
+G1 X153.23 Y110.11 A0
+distance=2.36
+OK
+G1 X154.07 Y107.91 A0
+distance=2.35
+OK
+G1 X154.83 Y105.68 A0
+distance=2.36
+OK
+G1 X155.52 Y103.42 A0
+distance=2.36
+OK
+G1 X156.14 Y101.15 A0
+distance=2.35
+OK
+G1 X156.69 Y98.86 A0
+distance=2.36
+OK
+G1 X157.17 Y96.55 A0
+distance=2.36
+OK
+G1 X157.58 Y94.23 A0
+distance=2.36
+OK
+G1 X157.91 Y91.90 A0
+distance=2.35
+OK
+G1 X158.17 Y89.56 A0
+distance=2.35
+OK
+G1 X158.35 Y87.21 A0
+distance=2.36
+OK
+G1 X158.46 Y84.86 A0
+distance=2.35
+OK
+G1 X158.50 Y82.50 A0
+distance=2.36
+OK
+G1 X158.50 Y82.50 A0
+distance=0.00
+OK
+M1 160
+OK

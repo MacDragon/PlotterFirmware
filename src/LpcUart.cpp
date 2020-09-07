@@ -10,7 +10,6 @@
 #include "FreeRTOS.h"
 #include "semphr.h"
 
-
 static LpcUart *u0;
 static LpcUart *u1;
 static LpcUart *u2;
@@ -56,11 +55,9 @@ void LpcUart::isr() {
 	Chip_UART_IRQRBHandler(uart, &rxring, &txring);
 
 	xSemaphoreGiveFromISR(newdata, &xHigherPriorityTaskWoken);
-    if( xHigherPriorityTaskWoken )
-	{
-		/* Actual macro used here is port specific. */
-		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-	}
+
+	/* Actual macro used here is port specific. */
+	portYIELD_FROM_ISR(pdTRUE); // hack to force scheduler even if previous semaphore not taken yet, for some reason this hangs.
 }
 
 bool LpcUart::init = false;
@@ -168,6 +165,8 @@ LpcUart::LpcUart(const LpcUartConfig &cfg) {
 	Chip_UART_IntEnable(uart, UART_INTEN_RXRDY);
 	Chip_UART_IntDisable(uart, UART_INTEN_TXRDY);	/* May not be needed */
 
+	NVIC_SetPriority(irqn, configMAX_SYSCALL_INTERRUPT_PRIORITY);
+
 	/* Enable UART interrupt */
 	NVIC_EnableIRQ(irqn);
 }
@@ -214,13 +213,13 @@ int  LpcUart::read(char *buffer, int len)
 
 int  LpcUart::readblock(char &c)
 {
-	xSemaphoreTake(newdata, portMAX_DELAY);
+	xSemaphoreTake(newdata, 10); // stop infinite blocking, attempted workaround.
 	return read(c);
 }
 
 int  LpcUart::readblock(char *buffer, int len)
 {
-	xSemaphoreTake(newdata, portMAX_DELAY);
+	xSemaphoreTake(newdata, 0);
 	return read(buffer, len);
 }
 

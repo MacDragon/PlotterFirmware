@@ -178,7 +178,7 @@ static void vUARTInTask(void *pvParameters)
 	while (1) {
 		// just to be on safe side then.
 		char ch = 0;
-		int read = uart->read(ch); // block was hanging unexpectedly.
+		int read = uart->readblock(ch); // block was hanging unexpectedly.
 
 		// didn't receive a char, skip.
 		if ( read == 0 )
@@ -217,6 +217,7 @@ static void vUARTInTask(void *pvParameters)
 //			ITM_write(inputstr);
 //			ITM_write("\r\n");
 
+			// only bother passing input if we didn't get an empty line.
 			if ( inputstr[0] != 0 )
 				vGCode(inputstr);
 //				xQueueSendToBack( xParseQueue, inputstr, portMAX_DELAY );
@@ -411,7 +412,7 @@ int main(void) {
 				(TaskHandle_t *) NULL);
 #else
 	xTaskCreate(vUARTInTask, "vUARTTask",
-				200, NULL, (tskIDLE_PRIORITY + 8UL),
+				200, NULL, (tskIDLE_PRIORITY + 3UL),
 				(TaskHandle_t *) NULL);
 #endif
 

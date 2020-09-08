@@ -47,17 +47,18 @@ void vConfigureTimerForRunTimeStats( void ) {
 
 }
 
-static void vGCode( const char * gcode);
-
 SemaphoreHandle_t xUARTMutex;
 
 LpcUart * uart;
 
 EEPROM * EEProm;
 
+#ifdef PARSERTASK
 // more useful for parse output than input..
-//QueueHandle_t xParseQueue;
-
+QueueHandle_t xParseQueue;
+#else
+static void vGCode( const char * gcode);
+#endif
 
 // just a function to putput the OK message for MDRAW as it's used for multiple responses.
 void printOK()
@@ -156,10 +157,11 @@ static void vUSBInput(void *pvParameters)
 				continue;
 			}
 
-			vGCode(inputstr);
-
-//			xQueueSendToBack( xParseQueue, inputstr, portMAX_DELAY );
-
+#ifdef PARSERTASK
+				xQueueSendToBack( xParseQueue, inputstr, portMAX_DELAY );
+#else
+				vGCode(inputstr);
+#endif
 			inputpos=0;
 			inputstr[0] = 0;
 
@@ -181,7 +183,7 @@ static void vUARTInTask(void *pvParameters)
 	while (1) {
 		// just to be on safe side then.
 		char ch = 0;
-		int read = uart->readblock(ch); // block was hanging unexpectedly.
+		int read = uart->read(ch); // block was hanging unexpectedly.
 
 		// didn't receive a char, skip.
 		if ( read == 0 )
@@ -222,9 +224,11 @@ static void vUARTInTask(void *pvParameters)
 
 			// only bother passing input if we didn't get an empty line.
 			if ( inputstr[0] != 0 )
+#ifdef PARSERTASK
+				xQueueSendToBack( xParseQueue, inputstr, portMAX_DELAY );
+#else
 				vGCode(inputstr);
-//				xQueueSendToBack( xParseQueue, inputstr, portMAX_DELAY );
-
+#endif
 			charcount = 0;
 			inputstr[0] = 0;
 		}
@@ -266,17 +270,25 @@ char * numstr( uint32_t num )
 }
 
 // was previously setup as a seperate task, but doesn't seem much need for that
-static void vGCode( const char * input) {
+#ifdef PARSERTASK
+static void vGCode(void *pvParameters ){
+#else
+	static void vGCode( const char * input) {
+#endif
 
 	char gcode[INPUTMAXLEN+1] = "";
+#ifdef PARSERTASK
+	while (1)
 
-//	while (1)
 	{
-//		xQueueReceive(xParseQueue, gcode, portMAX_DELAY);
-
-		ITM_write(input);
+		xQueueReceive(xParseQueue, gcode, portMAX_DELAY);
+#else
+		strcpy(gcode, input);
+#endif
+		ITM_write(gcode);
 		uint32_t starttick = DWT->CYCCNT;
-	    command parsed = GCodeParser(input);
+	    command parsed = GCodeParser(gcode);
+
 	    uint32_t ticktime = DWT->CYCCNT - starttick;
 #ifdef USESPRINT
 	    snprintf(gcode, 79, "Gcode parse took %ld cycles\r\n", ticktime);
@@ -358,7 +370,9 @@ static void vGCode( const char * input) {
 
 	    };
 	    vTaskDelay(10); // add in a small artificial delay to pretend doing something;
+#ifdef PARSERTASK
 	}
+#endif
 }
 
 
@@ -394,21 +408,16 @@ int main(void) {
 
 	ITM_write("Boot\r\n");
 
-	LpcPinMap none = {-1, -1}; // unused pin has negative values in it
-	LpcPinMap txpin = { 0, 18 }; // transmit pin that goes to debugger's UART->USB converter
-	LpcPinMap rxpin = { 0, 13 }; // receive pin that goes to debugger's UART->USB converter
-	LpcUartConfig cfg = { LPC_USART0, 115200, UART_CFG_DATALEN_8 | UART_CFG_PARITY_NONE | UART_CFG_STOPLEN_1, false, txpin, rxpin, none, none };
-	uart = new LpcUart(cfg);
-
 	EEProm = new EEPROM();
 
 
     // TODO: insert code here
 
 	xUARTMutex = xSemaphoreCreateMutex();
-
- //   xParseQueue = xQueueCreate( 5, sizeof( char[INPUTMAXLEN+1] ) );
- //   vQueueAddToRegistry( xParseQueue, "Parser input Queue" );
+#ifdef PARSERTASK
+    xParseQueue = xQueueCreate( 5, sizeof( char[INPUTMAXLEN+1] ) );
+    vQueueAddToRegistry( xParseQueue, "Parser input Queue" );
+#endif
 
 #ifdef USECDC
 	/* low level USB communicationthread */
@@ -424,12 +433,11 @@ int main(void) {
 				200, NULL, (tskIDLE_PRIORITY + 3UL),
 				(TaskHandle_t *) NULL);
 #endif
-
-/*
+#ifdef PARSERTASK
 	xTaskCreate(vGCode, "GCode Parser",
-				200, NULL, (tskIDLE_PRIORITY + 3UL),
+				200, NULL, (tskIDLE_PRIORITY + 4UL),
 				(TaskHandle_t *) NULL);
-*/
+#endif
 
 	vTaskStartScheduler();
 

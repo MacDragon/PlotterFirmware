@@ -8,6 +8,9 @@
 ===============================================================================
 */
 
+#define SPEEDSLOW  1000
+#define SPEEDFAST  4000
+
 #if defined (__USE_LPCOPEN)
 #if defined(NO_BOARD_LIB)
 #include "chip.h"
@@ -16,26 +19,38 @@
 #endif
 #endif
 
-
 #include "FreeRTOS.h"
 #include "semphr.h"
-#include <cr_section_macros.h>
-#include "FreeRTOS.h"
-#include "semphr.h"
+#include "event_groups.h"
 #include <cr_section_macros.h>
 #include "LpcUart.h"
-#include "gparse.h"
 #include "string.h"
 #include "ITM_write.h"
 #include "heap_lock_monitor.h"
 #include "user_vcom.h"
+#include <string>
+
+#include "gparse.h"
 #include "EEPROM.h"
+#include "helper.h"
+#include "DrawControl.h"
+#include "MotorXY.h"
+#include "DebugPrint.h"
+
+#define ECHO
+
+#define DEBUGMSG
+
+#define STEPS_PER_REV (400)
 
 // defines whether to use debuguart or CDC for the uart connection.
-//#define USECDC
+#define CDC
 // TODO: insert other include files here
 
 // TODO: insert other definitions and declarations here
+
+
+void printGCode( const char * output );
 
 extern "C" {
 
@@ -48,38 +63,86 @@ void vConfigureTimerForRunTimeStats( void ) {
 }
 
 SemaphoreHandle_t xUARTMutex;
+EventGroupHandle_t xInit;
+SemaphoreHandle_t xAllowMotor;
 
 LpcUart * uart;
 
 EEPROM * EEProm;
 
-#ifdef PARSERTASK
+MotorXY * XY;
+DrawControl * Draw;
+
+
+DigitalIoPin * Limit1; // 0_9
+DigitalIoPin * Limit2; // 0_29
+DigitalIoPin * Limit3; // 0_9
+DigitalIoPin * Limit4; // 0_29
+
+OutputPin * Laser; // 0_12
+OutputPin * Pen; // 0_10
+
+OutputPin * Red; // 0_25
+OutputPin * Blue; // 1_1
+
+SemaphoreHandle_t xLimit;
+
+
+
 // more useful for parse output than input..
 QueueHandle_t xParseQueue;
-#else
-static void vGCode( const char * gcode);
-#endif
 
 // just a function to putput the OK message for MDRAW as it's used for multiple responses.
 void printOK()
 {
 	char okmsg[]="OK\r\n";
-#ifdef USECDC
+#ifdef CDC
 	USB_send((uint8_t *)okmsg, strlen(okmsg));
 #else
-	xSemaphoreTake(xUARTMutex, portMAX_DELAY);
 	uart->write(okmsg);
-	xSemaphoreGive(xUARTMutex);
 #endif
 	ITM_write(okmsg);
 }
 
 #define INPUTMAXLEN (80)
 
-#ifdef USECDC
-static void vUSBInput(void *pvParameters)
+
+void vInwrite(const char *str) {
+#ifdef CDC
+
+#else
+	if ( uart != nullptr )
+	{
+		uart->write(str);
+	}
+#endif
+}
+
+static void vInput(void *pvParameters)
 {
 	vTaskDelay(100);
+
+	xEventGroupWaitBits(xInit, 1, pdFALSE, pdTRUE, portMAX_DELAY);
+	vInwrite("\r\nWaiting for Limit switch opening...\r\n");
+	xSemaphoreTake(xAllowMotor, portMAX_DELAY);
+
+	vInwrite("\r\nRunning plotter initilisation...\r\n");
+
+	if ( !XY->trackinit() )
+	{
+		vInwrite("Failed to calibrate, halting stepper.");
+		while ( 1 ) vTaskSuspend(NULL);
+	}
+
+	vInwrite("Track width detected: 0-");
+	vInwrite(getnumstr(XY->getwidth()));
+	vInwrite("steps\r\n");
+	vInwrite("Track height detected: 0-");
+	vInwrite(getnumstr(XY->getheight()));
+	vInwrite("steps\r\n");
+	vInwrite("Waiting for commands\r\n");
+
+	xEventGroupSetBits(xInit,2);
 
 	char inputstr[INPUTMAXLEN+1] = "";
 	uint8_t inputpos = 0;
@@ -88,15 +151,32 @@ static void vUSBInput(void *pvParameters)
 	uint32_t rcvlen = 0;
 	uint32_t rcvpos = 0;
 
+#ifndef CDC
+	uart->read(rcv, RCV_BUFSIZE, 0); // clear buffer.
+	rcv[0] = '\0';
+#endif
+
 	while (1) {
 		// just to be on safe side then.
 
 		if ( rcvpos == 0 ) // run out of existing input to process, get more.
 		{
+#ifdef CDC
 		    rcvlen = USB_receive((uint8_t *)rcv, RCV_BUFSIZE); // this already blocks.
-			rcv[rcvlen] = '\0';
+//			uart->write("In:");
+//			uart->write(rcv);
 
+#ifdef ECHO
 			USB_send((uint8_t *)rcv, rcvlen);
+			uart->write("Out:");
+			uart->write(rcv);
+			uart->write("\r\n");
+#endif
+#else
+		    rcvlen =  uart->read(rcv, RCV_BUFSIZE, 20);
+			rcv[rcvlen] = '\0';
+			vInwrite(rcv);
+#endif
 		}
 
 		bool endline = false;
@@ -138,17 +218,26 @@ static void vUSBInput(void *pvParameters)
 
 		if( inputpos >= INPUTMAXLEN || endline)
 		{
+			int32_t length = strlen(inputstr);
+
+			for( int i=length; isspace(inputstr[i-1]);i--)
+				inputstr[i-1]='\0';
 
 			// check valid end of line, if so process through.
 
 			// echo back
+#ifdef CDC
+#ifdef ECHO
 			USB_send((uint8_t *)inputstr, strlen(inputstr));
 			USB_send((uint8_t *)"\r\n", 2);
-
-//			if ( inputstr[strlen(inputstr)-1] == '\n' || inputstr[strlen(inputstr)-1] == '\r' )
-//			{
-//				inputstr[strlen(inputstr)-1] = 0; // remove EOL terminator.
-//			}
+			uart->write("Out:");
+			uart->write(inputstr);
+			uart->write("\r\n");
+#endif
+#else
+			uart->write(inputstr);
+			uart->write("\r\n");
+#endif
 
 			if ( strlen(inputstr) == 0) // if we now have empty string don't process further.sa=:
 			{
@@ -157,89 +246,20 @@ static void vUSBInput(void *pvParameters)
 				continue;
 			}
 
-#ifdef PARSERTASK
-				xQueueSendToBack( xParseQueue, inputstr, portMAX_DELAY );
-#else
-				vGCode(inputstr);
-#endif
+
+			xQueueSendToBack( xParseQueue, inputstr, portMAX_DELAY );
+
 			inputpos=0;
 			inputstr[0] = 0;
 
 		}
 	}
 }
-#else
-
-static void vUARTInTask(void *pvParameters)
-{
-	uint8_t charcount = 0;
-
-	char inputstr[81] = { 0 }; // shouldn't ever be a line longer than this from mdraw
-
-	int inputpos = 0;
-
-	ITM_write("Starting UART\r\n");
-
-	while (1) {
-		// just to be on safe side then.
-		char ch = 0;
-		int read = uart->read(ch); // block was hanging unexpectedly.
-
-		// didn't receive a char, skip.
-		if ( read == 0 )
-		{
-			taskYIELD();
-			continue; // nothing to do this loop, return to start.
-		}
-
-		inputpos += read;
-
-		bool endline = false;
-
-		// not received end of line string, add character to input buffer.
-		if ( !( ch == '\n' || ch == '\r') )
-		{
-#ifndef FULLECHO
-			xSemaphoreTake(xUARTMutex, portMAX_DELAY);
-			uart->write(ch);
-			xSemaphoreGive(xUARTMutex);
-#endif
-			inputstr[charcount] = ch;
-			inputstr[charcount+1] = 0;
-			++charcount;
-		} else endline = true;
-
-		if ( charcount == 80 || endline )
-		{
-
-			xSemaphoreTake(xUARTMutex, portMAX_DELAY);
-#ifdef FULLECHO
-			uart->write(inputstr);
-#endif
-			uart->write("\r\n");
-			xSemaphoreGive(xUARTMutex);
-
-//			ITM_write(inputstr);
-//			ITM_write("\r\n");
-
-			// only bother passing input if we didn't get an empty line.
-			if ( inputstr[0] != 0 )
-#ifdef PARSERTASK
-				xQueueSendToBack( xParseQueue, inputstr, portMAX_DELAY );
-#else
-				vGCode(inputstr);
-#endif
-			charcount = 0;
-			inputstr[0] = 0;
-		}
-	}
-}
-#endif
 
 
 void printGCode( const char * output )
 {
-#ifdef USECDC
+#ifdef CDC
 	USB_send((uint8_t *)output, strlen(output));
 #else
 	xSemaphoreTake(xUARTMutex, portMAX_DELAY);
@@ -250,55 +270,30 @@ void printGCode( const char * output )
 }
 
 
-char numstrint[11];
-
-char * numstr( uint32_t num )
-{
-		uint8_t i = 0;
-		uint32_t temp=num;
-		  for(i=1; i<=11; i++)
-		  {
-			  numstrint[11-i] = (uint8_t) ((temp % 10UL) + '0');
-		    temp/=10;
-		  }
-
-		  numstrint[i-1] = '\0';
-
-		for ( i=0;i<10&&numstrint[i]=='0';i++);
-
-		return &numstrint[i];
-}
-
-// was previously setup as a seperate task, but doesn't seem much need for that
-#ifdef PARSERTASK
 static void vGCode(void *pvParameters ){
-#else
-	static void vGCode( const char * input) {
-#endif
-
 	char gcode[INPUTMAXLEN+1] = "";
-#ifdef PARSERTASK
-	while (1)
 
+	xEventGroupWaitBits(xInit, 2, pdFALSE, pdTRUE, portMAX_DELAY);
+
+	int32_t xfact = ((EEProm->getXSize()*10000) / XY->getwidth());
+	int32_t yfact = ((EEProm->getYSize()*10000) / XY->getheight());
+
+	int32xy_t mdrawpos={0,0};
+
+	uint32_t starttime;
+	uint32_t runtime;
+
+
+	while (1)
 	{
 		xQueueReceive(xParseQueue, gcode, portMAX_DELAY);
-#else
-		strcpy(gcode, input);
-#endif
-		ITM_write(gcode);
+		uart->write(gcode);
+
 		uint32_t starttick = DWT->CYCCNT;
 	    command parsed = GCodeParser(gcode);
-
 	    uint32_t ticktime = DWT->CYCCNT - starttick;
-#ifdef USESPRINT
-	    snprintf(gcode, 79, "Gcode parse took %ld cycles\r\n", ticktime);
-#else
-	    strcpy(gcode, "Gcode parse took ");
-	    strcat(gcode, numstr( ticktime ));
-	    strcat(gcode, " cycles\n\r");
-#endif
-		ITM_write(gcode);
-
+	    snprintf(gcode, 79, " : parse took %ld cycles\r\n", ticktime);
+	    uart->write(gcode);
 	    switch ( parsed.cmd )
 	    {
 // messages expecting explicit reply rather than OK, or data saving.
@@ -306,23 +301,7 @@ static void vGCode(void *pvParameters ){
 
 // saves a bit of stack space not using full sprintf formatting function.
 //	Harder work to write output though, but as this is only complex output needed...
-#ifndef USESPRINT
-			    strcpy(gcode, "M10 XY ");
-			    strcat(gcode, numstr( EEProm->getXSize() ));
-			    strcat(gcode, " ");
-			    strcat(gcode, numstr( EEProm->getYSize() ));
-			    strcat(gcode, " 0.00 0.00 A");
-			    strcat(gcode, numstr( EEProm->getXDir() ));
-			    strcat(gcode, " B");
-			    strcat(gcode, numstr( EEProm->getYDir() ));
-			    strcat(gcode, " H0 S");
-			    strcat(gcode, numstr( EEProm->getSpeed() ));
-			    strcat(gcode, " U");
-			    strcat(gcode, numstr( EEProm->getPUp() ));
-			    strcat(gcode, " D");
-				strcat(gcode, numstr( EEProm->getPDown() ));
-				strcat(gcode, " \r\n");
-#else
+
 				snprintf(gcode, 79,  "M10 XY %ld %ld 0.00 0.00 A%d B%d H0 S%d U%d D%d\r\n",
 						EEProm->getXSize(),
 						EEProm->getYSize(),
@@ -332,16 +311,22 @@ static void vGCode(void *pvParameters ){
 						EEProm->getPUp(),
 						EEProm->getPDown()
 						);
-#endif
+
 				printGCode(gcode);
-				printOK();
+	//			printOK(); // no OK on M10?
 				break;
 			case limit:
-				printGCode("M11 1 1 1 1\r\n"); // fake limit switch reporting for now..
-				printOK();
+				snprintf(gcode, 79,  "M11 %d %d %d %d\r\n",
+						!Limit1->read(),
+						!Limit2->read(),
+						!Limit3->read(),
+						!Limit4->read());
+				printGCode(gcode);
+	//			printOK(); // no OK on M11?
 				break;
 			case savepen: // request to save new pen up/down positions.
 				EEProm->setPen(parsed.penstore.up, parsed.penstore.down);
+				Draw->setPenUpDown(parsed.penstore.up, parsed.penstore.down);
 				ITM_write("Pen data saved.\n");
 				printOK();
 				break;
@@ -353,26 +338,112 @@ static void vGCode(void *pvParameters ){
 						parsed.stepper.height,
 						parsed.stepper.speed);
 				ITM_write("Stepper data saved.\n");
+				xfact = ((EEProm->getXSize()*10000) / XY->getwidth());
+				yfact = ((EEProm->getYSize()*10000) / XY->getheight());
+				XY->setPPS(((SPEEDSLOW*100)*(parsed.stepper.speed*100)/100)/10000, SPEEDFAST );
+				XY->setInvert((parsed.stepper.A==0)?false:true, (parsed.stepper.B==0)?false:true);
+
 				printOK();
 				break;
 
 				// the OK messages.
 
 			case setpen:
+				Draw->setPen( parsed.pen.pos );
+				printOK();
+				break;
 			case setlaser:
+				Draw->setLaser(parsed.laser.power );
+				printOK();
+				break;
 			case origin:
-			case goxy: printOK(); break;
+				mdrawpos = {0,0};
+				XY->gotoxy({0, 0}, true);
+				printOK();
+				break;
+			case goxy:
 
+				// TODO multiple XY could be batched together for faster movement without decelerating between
+				// if movement direction similar enough. -- would need quite a long queue.
+
+				// likely not for this project
+
+				if ( (parsed.pos.abs==0) )
+				{
+					mdrawpos = {(parsed.pos.x), (parsed.pos.y)};
+				} else
+				{
+					mdrawpos += {(parsed.pos.x), (parsed.pos.y)};
+				}
+				// scale factor?
+
+				starttime = xTaskGetTickCount();
+				XY->gotoxy({(parsed.pos.x*100)/xfact, (parsed.pos.y*100)/yfact}, true); // always absolute value.
+				runtime = xTaskGetTickCount()-starttime;
+				snprintf(gcode, 79,  "Move took %ld ms\r\n",runtime );
+				uart->write(gcode);
+
+
+				printOK();
+				break;
 			case bad:
 			case none:
 			default:
 				break;
 
 	    };
-	    vTaskDelay(10); // add in a small artificial delay to pretend doing something;
-#ifdef PARSERTASK
+//	    vTaskDelay(10); // add in a small artificial delay to pretend doing something;
 	}
-#endif
+}
+
+
+static void vLimit(void *pvParameters)
+{
+	vTaskDelay(100);
+
+	bool holdingmutex = true;
+	xSemaphoreTake(xAllowMotor, portMAX_DELAY);
+
+//	setuppinint( );
+	// ensure the semaphore isn't taken before limit task has it.
+	xEventGroupSetBits(xInit,1);
+	while ( holdingmutex )
+	{
+		if ( ( Limit1->read() || Limit2->read() || Limit3->read() || Limit4->read() ) )
+		{
+			if ( !holdingmutex)
+			{
+				xSemaphoreTake(xAllowMotor, portMAX_DELAY);
+				holdingmutex=true;
+			}
+		} else
+		{
+			if ( holdingmutex )
+			{
+				holdingmutex=false;
+				xSemaphoreGive(xAllowMotor);
+			}
+		}
+
+		Blue->toggle(); // show motor movement on led.
+		vTaskDelay(200);
+	}
+
+	Blue->write(false);
+
+	while (1) {
+
+		if ( xSemaphoreTake(xLimit, 0) || Limit1->read() || Limit2->read() || Limit3->read()|| Limit4->read() )
+		{
+			Red->setcounter(500);
+		}
+		else
+		{
+			Red->checkcounter();
+		}
+
+		vTaskDelay(10);
+	}
 }
 
 
@@ -393,51 +464,93 @@ int main(void) {
 #endif
 #endif
 
+	PinMap LaserP = { 0, 12 };
+	PinMap PenP = { 0, 10 };
+
+    Laser = new OutputPin(LaserP.port,LaserP.pin,false);
+	Laser->write(false);
+
+    // TODO: insert code here
+
+    // Force the counter to be placed into memory
+//    volatile static int i = 0 ;
+
+	ITM_init();
+
+	ITM_write("Boot\r\n");
+
+	// initialize RIT (= enable clocking etc.)
+	Chip_RIT_Init(LPC_RITIMER);
+	// set the priority level of the interrupt
+	// The level must be equal or lower than the maximum priority specified in FreeRTOS config
+	// Note that in a Cortex-M3 a higher number indicates lower interrupt priority
+	NVIC_SetPriority( RITIMER_IRQn, configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY + 1 );
+
+	EEProm = new EEPROM();
+
+	Red = new OutputPin(0,25,true);
+	Blue = new OutputPin(1,1,true);
+
+	xLimit = xSemaphoreCreateBinary();
+	xAllowMotor = xSemaphoreCreateMutex();
+	xInit = xEventGroupCreate();
+
 	LpcPinMap none = {-1, -1}; // unused pin has negative values in it
 	LpcPinMap txpin = { 0, 18 }; // transmit pin that goes to debugger's UART->USB converter
 	LpcPinMap rxpin = { 0, 13 }; // receive pin that goes to debugger's UART->USB converter
 	LpcUartConfig cfg = { LPC_USART0, 115200, UART_CFG_DATALEN_8 | UART_CFG_PARITY_NONE | UART_CFG_STOPLEN_1, false, txpin, rxpin, none, none };
 	uart = new LpcUart(cfg);
 
-    // TODO: insert code here
+	PinMap Lim1P = { 1, 3 };
+	PinMap Lim2P = { 0, 0 };
+	PinMap Lim3P = { 0, 9 };
+	PinMap Lim4P = { 0, 29 };
 
-    // Force the counter to be placed into memory
-    volatile static int i = 0 ;
+	PinMap MotorX = { 0, 24 };
+	PinMap DirX = { 1, 0 };
 
-	ITM_init();
+	PinMap MotorY = { 0, 27 };
+	PinMap DirY = { 0, 28 };
 
-	ITM_write("Boot\r\n");
+	Limit1 = new DigitalIoPin(Lim1P.port,Lim1P.pin,true, true, true);
+	Limit2 = new DigitalIoPin(Lim2P.port,Lim2P.pin,true, true, true);
+	Limit3 = new DigitalIoPin(Lim3P.port,Lim3P.pin,true, true, true);
+	Limit4 = new DigitalIoPin(Lim4P.port,Lim4P.pin,true, true, true);
 
-	EEProm = new EEPROM();
+	MotorConfig mcfg = { MotorX, MotorY, DirX, DirY, Lim1P, Lim2P, Lim3P, Lim4P,
+			STEPS_PER_REV, (uint32_t)((SPEEDSLOW*100)*(EEProm->getSpeed()*100)/100)/10000, SPEEDFAST, EEProm->getXDir(), EEProm->getYDir() };
 
+	Draw = new DrawControl( PenP, EEProm->getPUp(),EEProm->getPDown(), LaserP );
+
+	XY = new MotorXY(mcfg, Draw, uart );
 
     // TODO: insert code here
 
 	xUARTMutex = xSemaphoreCreateMutex();
-#ifdef PARSERTASK
-    xParseQueue = xQueueCreate( 5, sizeof( char[INPUTMAXLEN+1] ) );
-    vQueueAddToRegistry( xParseQueue, "Parser input Queue" );
-#endif
 
-#ifdef USECDC
+    xParseQueue = xQueueCreate( 10, sizeof( char[INPUTMAXLEN+1] ) );
+    vQueueAddToRegistry( xParseQueue, "Parser input Queue" );
+
+#ifdef CDC
 	/* low level USB communicationthread */
 	xTaskCreate(cdc_task, "CDC",
-				100, NULL, (tskIDLE_PRIORITY + 2UL), // 87
+				100, NULL, (tskIDLE_PRIORITY + 3UL), // 87
 				(TaskHandle_t *) NULL);
+#endif
 	// higher level usb uart input
-	xTaskCreate(vUSBInput, "USB In",
-				200, NULL, (tskIDLE_PRIORITY + 3UL),
+	xTaskCreate(vInput, "MDraw Input",
+				300, NULL, (tskIDLE_PRIORITY + 3UL),
 				(TaskHandle_t *) NULL);
-#else
-	xTaskCreate(vUARTInTask, "vUARTTask",
-				200, NULL, (tskIDLE_PRIORITY + 3UL),
-				(TaskHandle_t *) NULL);
-#endif
-#ifdef PARSERTASK
+
 	xTaskCreate(vGCode, "GCode Parser",
-				200, NULL, (tskIDLE_PRIORITY + 4UL),
+				300, NULL, (tskIDLE_PRIORITY + 4UL),
 				(TaskHandle_t *) NULL);
-#endif
+
+	SetupDebugPrint(uart);
+
+	xTaskCreate(vLimit, "Limit Switch Read", // lowest priority task, only visual indication.
+			100, NULL, (tskIDLE_PRIORITY + 2UL),
+			(TaskHandle_t *) NULL);
 
 	vTaskStartScheduler();
 

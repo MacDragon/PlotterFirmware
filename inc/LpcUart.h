@@ -11,6 +11,7 @@
 #include "chip.h"
 #include "FreeRTOS.h"
 #include "semphr.h"
+#include "Fmutex.h"
 
 struct LpcPinMap {
 	int port; /* set to -1 to indicate unused pin */
@@ -40,15 +41,15 @@ public:
 	int  write(const char *s);
 	int  write(const char *buffer, int len);
 	int  read(char &c); /* get a single character. Returns number of characters read --> returns 0 if no character is available */
-	int  readblock( char &c);
 	int  read(char *buffer, int len);
-	int  readblock(char *buffer, int len);
+	int  read(char *buffer, int len, TickType_t total_timeout, TickType_t ic_timeout = portMAX_DELAY);
 	void txbreak(bool brk); /* set break signal on */
 	bool rxbreak(); /* check if break is received */
 	void speed(int bps); /* change transmission speed */
 	bool txempty();
+	void set_on_receive(void(*cb)(void));
 
-	void isr(); /* ISR handler. This will be called by the HW ISR handler. Do not call from application */
+	void isr(portBASE_TYPE *hpw); /* ISR handler. This will be called by the HW ISR handler. Do not call from application */
 private:
 	LPC_USART_T *uart;
 	IRQn_Type irqn;
@@ -60,7 +61,11 @@ private:
 	uint8_t rxbuff[UART_RB_SIZE];
 	uint8_t txbuff[UART_RB_SIZE];
 	static bool init; /* set when first UART is initialized. We have a global clock setting for all UARTSs */
-	SemaphoreHandle_t newdata;
+	TaskHandle_t notify_rx;
+	TaskHandle_t notify_tx;
+	void (*on_receive)(void); // callback for received data notifications
+	Fmutex read_mutex;
+	Fmutex write_mutex;
 };
 
 #endif /* LPCUART_H_ */

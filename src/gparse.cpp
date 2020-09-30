@@ -229,7 +229,7 @@ command GCodeParser( const char *input )
                            res.cmd = setpen;
                        break;
                    case 5 : // save stepper direction, area, speed. // expects 5 lettered tokens.
-                       if ( tokenScan( (int32_t *) &res.penstore, input, "ABHWS" ) )
+                       if ( tokenScan( (int32_t *) &res.penstore, input, "ABHWD" ) )  // "ABHWS" in doc?
                            res.cmd = savestepper;
                        break;
                    case 4 : // laser power.
@@ -244,6 +244,12 @@ command GCodeParser( const char *input )
                switch ( tokenint ) {
                    case 1 : // go xy
                        if ( tokenScan( (int32_t *) &res.penstore, input, "XYA" ) ) res.cmd = goxy;
+                       if ( res.cmd != goxy ) //  might be passed without an A too it seems.
+                    	   if ( tokenScan( (int32_t *) &res.penstore, input, "XY" ) )
+						   {
+                    		   res.cmd = goxy;
+                    		   res.pos.abs = 0;
+						   }
                        break;
                    case 28 : //  go origin, no data. -- this could also probably be stored as go x0, y0, abs 1
                        if ( checkNoTokens(input) )

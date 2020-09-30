@@ -6,9 +6,9 @@
  */
 
 #include <cstring>
+#include <mutex>
 #include "LpcUart.h"
-#include "FreeRTOS.h"
-#include "semphr.h"
+
 
 static LpcUart *u0;
 static LpcUart *u1;
@@ -21,43 +21,51 @@ extern "C" {
  */
 void UART0_IRQHandler(void)
 {
-	/* Want to handle any errors? Do it here. */
+	portBASE_TYPE xHigherPriorityTaskWoken = pdFALSE;
 
-	/* Use default ring buffer handler. Override this with your own
-	   code if you need more capability. */
-	if(u0) u0->isr();
+	if(u0) {
+		u0->isr(&xHigherPriorityTaskWoken);
+	}
+
+	portEND_SWITCHING_ISR(xHigherPriorityTaskWoken);
 }
 
 void UART1_IRQHandler(void)
 {
-	/* Want to handle any errors? Do it here. */
+	portBASE_TYPE xHigherPriorityTaskWoken = pdFALSE;
 
-	/* Use default ring buffer handler. Override this with your own
-	   code if you need more capability. */
-	if(u1) u1->isr();
+	if(u1) {
+		u1->isr(&xHigherPriorityTaskWoken);
+	}
+
+	portEND_SWITCHING_ISR(xHigherPriorityTaskWoken);
 }
 
 void UART2_IRQHandler(void)
 {
-	/* Want to handle any errors? Do it here. */
+	portBASE_TYPE xHigherPriorityTaskWoken = pdFALSE;
 
-	/* Use default ring buffer handler. Override this with your own
-	   code if you need more capability. */
-	if(u2) u2->isr();
+	if(u2) {
+		u2->isr(&xHigherPriorityTaskWoken);
+	}
+
+	portEND_SWITCHING_ISR(xHigherPriorityTaskWoken);
 }
 
 }
 
 
-void LpcUart::isr() {
-	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+void LpcUart::isr(portBASE_TYPE *hpw) {
+	// get interrupt status for notifications
+	uint32_t istat = Chip_UART_GetIntStatus(uart);
 
+	// chip library is used to handle receive and transmit
 	Chip_UART_IRQRBHandler(uart, &rxring, &txring);
 
-	xSemaphoreGiveFromISR(newdata, &xHigherPriorityTaskWoken);
-
-	/* Actual macro used here is port specific. */
-	portYIELD_FROM_ISR(pdTRUE); // hack to force scheduler even if previous semaphore not taken yet, for some reason this hangs.
+	// notify of the events handled
+	if(notify_rx && (istat & UART_STAT_RXRDY) ) vTaskNotifyGiveFromISR(notify_rx, hpw);
+	if(notify_tx && (istat & UART_STAT_TXRDY) ) vTaskNotifyGiveFromISR(notify_tx, hpw);
+	if(on_receive && (istat & UART_STAT_RXRDY) ) on_receive();
 }
 
 bool LpcUart::init = false;
@@ -69,9 +77,6 @@ LpcUart::LpcUart(const LpcUartConfig &cfg) {
 	CHIP_SWM_PIN_MOVABLE_T rts;
 	bool use_rts = (cfg.rts.port >= 0);
 	bool use_cts = (cfg.cts.port >= 0);
-
-
-	newdata = xSemaphoreCreateBinary();
 
 	if(!init) {
 		init = true;
@@ -140,7 +145,9 @@ LpcUart::LpcUart(const LpcUartConfig &cfg) {
 		Chip_SWM_MovablePortPinAssign(rts, cfg.rts.port, cfg.rts.pin);
 	}
 
-
+	notify_rx = nullptr;
+	notify_tx = nullptr;
+	on_receive = nullptr;
 	/* Setup UART */
 	Chip_UART_Init(uart);
 	Chip_UART_ConfigData(uart, cfg.data);
@@ -165,8 +172,7 @@ LpcUart::LpcUart(const LpcUartConfig &cfg) {
 	Chip_UART_IntEnable(uart, UART_INTEN_RXRDY);
 	Chip_UART_IntDisable(uart, UART_INTEN_TXRDY);	/* May not be needed */
 
-	NVIC_SetPriority(irqn, configMAX_SYSCALL_INTERRUPT_PRIORITY);
-
+	NVIC_SetPriority(irqn, configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY + 1);
 	/* Enable UART interrupt */
 	NVIC_EnableIRQ(irqn);
 }
@@ -187,74 +193,123 @@ LpcUart::~LpcUart() {
 			u2 = nullptr;
 		}
 	}
-	vSemaphoreDelete(newdata);
+}
+
+void LpcUart::set_on_receive(void(*cb)(void))
+{
+	on_receive = cb;
 }
 
 
 int  LpcUart::free()
 {
-	return RingBuffer_GetCount(&txring);;
+	std::lock_guard<Fmutex> lock(write_mutex);
+
+	return UART_RB_SIZE - RingBuffer_GetCount(&txring);
 }
 
 int  LpcUart::peek()
 {
+	std::lock_guard<Fmutex> lock(read_mutex);
+
 	return RingBuffer_GetCount(&rxring);
 }
 
 int  LpcUart::read(char &c)
 {
-	return Chip_UART_ReadRB(uart, &rxring, &c, 1);
+	return read(&c, 1);
 }
 
 int  LpcUart::read(char *buffer, int len)
 {
+	std::lock_guard<Fmutex> lock(read_mutex);
+
+	if(RingBuffer_GetCount(&rxring) <= 0) {
+		notify_rx = xTaskGetCurrentTaskHandle();
+		while(RingBuffer_GetCount(&rxring) <= 0) {
+			ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
+		}
+		notify_rx = nullptr;
+	}
+
 	return Chip_UART_ReadRB(uart, &rxring, buffer, len);
 }
 
-int  LpcUart::readblock(char &c)
-{
-	xSemaphoreTake(newdata, 10); // stop infinite blocking, attempted workaround.
-	return read(c);
-}
 
-int  LpcUart::readblock(char *buffer, int len)
+int  LpcUart::read(char *buffer, int len, TickType_t total_timeout, TickType_t ic_timeout)
 {
-	xSemaphoreTake(newdata, 0);
-	return read(buffer, len);
+	std::lock_guard<Fmutex> lock(read_mutex);
+
+	// we can't read more than ring buffer size at a time
+	if(len > UART_RB_SIZE) len = UART_RB_SIZE;
+
+	TimeOut_t timeoutState;
+	vTaskSetTimeOutState(&timeoutState);
+
+	notify_rx = xTaskGetCurrentTaskHandle();
+	while(RingBuffer_GetCount(&rxring) < len && xTaskCheckForTimeOut(&timeoutState, &total_timeout) == pdFALSE) {
+		TickType_t timeout = total_timeout > ic_timeout ? ic_timeout : total_timeout;
+		 if(ulTaskNotifyTake( pdTRUE, timeout ) == 0) break;
+	}
+	notify_rx = nullptr;
+
+	return Chip_UART_ReadRB(uart, &rxring, buffer, len);;
 }
 
 int LpcUart::write(char c)
 {
-	return Chip_UART_SendRB(uart, &txring, &c, 1);
+	return write(&c, 1);
 }
 
 int LpcUart::write(const char *s)
 {
-	return Chip_UART_SendRB(uart, &txring, s, strlen(s));
+	return write(s, strlen(s));
 }
 
 int LpcUart::write(const char *buffer, int len)
 {
-	return Chip_UART_SendRB(uart, &txring, buffer, len);
+	std::lock_guard<Fmutex> lock(write_mutex);
+
+	int pos = 0;
+	notify_tx = xTaskGetCurrentTaskHandle();
+
+	while(len > pos) {
+		// restrict single write to ring buffer size
+		int size = (len - pos) > UART_RB_SIZE ? UART_RB_SIZE : (len - pos);
+
+		// wait until we have space in the ring buffer
+		while(UART_RB_SIZE - RingBuffer_GetCount(&txring) < size) {
+			ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
+		}
+		pos += Chip_UART_SendRB(uart, &txring, buffer+pos, size);
+	}
+	notify_tx = nullptr;
+
+	return pos;
 }
 
 void LpcUart::txbreak(bool brk)
 {
-	// break handling not implemented yeet
+	// break handling not implemented yet
 }
 
 bool LpcUart::rxbreak()
 {
-	// break handling not implemented yeet
+	// break handling not implemented yet
 	return false;
 }
 
 void LpcUart::speed(int bps)
 {
+	std::lock_guard<Fmutex> lockw(write_mutex);
+	std::lock_guard<Fmutex> lockr(read_mutex);
+
 	Chip_UART_SetBaud(uart, bps);
 }
 
 bool LpcUart::txempty()
 {
+	std::lock_guard<Fmutex> lock(write_mutex);
+
 	return (RingBuffer_GetCount(&txring) == 0);
 }

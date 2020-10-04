@@ -143,6 +143,7 @@ void DrawControl::intsetPen( uint8_t position )
 DrawControl::DrawControl( PinMap PenPin, uint8_t penup, uint8_t pendown, PinMap LaserPin ) : penup(penup), pendown(pendown)
 {
 	outofbounds = false;
+	inmotion = false; // setup so that we're prepared to draw && turn on laser, but keep it off when power is set.
 	curpenpos = penup;
 	curlaser = 0;
 	sctInit( PenPin, penup, LaserPin ); // set the initial pen position ( should be up )
@@ -150,13 +151,13 @@ DrawControl::DrawControl( PinMap PenPin, uint8_t penup, uint8_t pendown, PinMap 
 
 DrawControl::~DrawControl() {
 	// TODO Auto-generated destructor stub
-	}
+}
 
 
 void DrawControl::setLaser( uint16_t power )
 {
 	curlaser = power;
-	if ( ! outofbounds )
+	if ( ! outofbounds && inmotion )
 	{
 		intsetLaser(power);
 	}
@@ -195,6 +196,7 @@ void DrawControl::ismoving( bool moving ) // ensure laser is only on when actual
 {
 	if ( moving )
 	{
+		inmotion = true;
 		if ( curlaser > 1 )
 			intsetLaser( curlaser );
 		else
@@ -202,6 +204,7 @@ void DrawControl::ismoving( bool moving ) // ensure laser is only on when actual
 
 	} else
 	{
+		inmotion = false;
 		intsetLaser( 0 );
 	}
 

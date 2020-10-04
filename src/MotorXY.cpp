@@ -460,6 +460,8 @@ bool MotorXY::trackinit() {
 
 	gotoxy( {-99999,0}, false, ppsslow, true );
 
+	vTaskDelay(50);
+
 	LimitXL = getActiveLimit();
 
 	if ( LimitXL == nullptr )
@@ -478,6 +480,8 @@ bool MotorXY::trackinit() {
 	{
 		gotoxy( {0,-99999}, false, ppsslow, true );
 
+		vTaskDelay(10);
+
 		LimitYD = getActiveLimit();
 
 		if ( LimitYD == nullptr )
@@ -494,6 +498,8 @@ bool MotorXY::trackinit() {
 	// find X home & right limit switch
 
 	moved =  gotoxy( {99999,0}, false, ppsslow, true );
+
+	vTaskDelay(50);
 
 	LimitXR = getActiveLimit();
 
@@ -512,6 +518,8 @@ bool MotorXY::trackinit() {
 	{
 
 		moved =  gotoxy( {0,99999}, false, ppsslow, true );
+
+		vTaskDelay(50);
 
 		LimitYU = getActiveLimit();
 
@@ -560,7 +568,7 @@ bool MotorXY::trackinit() {
 		 // move to limit switch with a larger than possible move, add previous correction to account for not being on limit switch anymore.
 		moved = domove({approxwidth,approxheight}, ppsslow, ppsfast, direction, direction, false );
 
-		int32xy_t small=domove({20,0}, ppsslow, ppsfast, direction, none, false );
+		int32xy_t small=domove({20,0}, ppsslow, ppsslow, direction, none, false );
 		abspos.x+=moved.x+small.x;
 
 		moved.x += small.x;
@@ -1086,8 +1094,8 @@ MotorXY::MotorXY(const MotorConfig &cfg, DrawControl *Draw, LpcUart *UART ) {
 	XLimitsSet = false;
 
 
-	ppsslow = 1000; // set default safe speed at init.
-	ppsfast = 4000;
+	ppsslow = cfg.ppsslow; // set default safe speed at init.
+	ppsfast = cfg.ppsfast;
 
 	sbRIT = xSemaphoreCreateBinary();
 

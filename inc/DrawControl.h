@@ -43,6 +43,7 @@ private:
 	uint8_t curlaser;
 	uint8_t curpenpos;
 	bool outofbounds;
+	bool inmotion;
 };
 
 #endif /* DRAWCONTROL_H_ */

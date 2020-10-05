@@ -9,6 +9,8 @@
 #include "FreeRTOS.h"
 #include "semphr.h"
 #include "helper.h"
+#include <string.h>
+#include "I2C.h"
 
 void DrawControl::setPenUpDown(uint8_t penup, uint8_t pendown) {
 
@@ -142,6 +144,16 @@ void DrawControl::intsetPen( uint8_t position )
 
 DrawControl::DrawControl( PinMap PenPin, uint8_t penup, uint8_t pendown, PinMap LaserPin ) : penup(penup), pendown(pendown)
 {
+
+	I2C_config cfg;
+	I2C i2c(cfg);
+	char data[32] = { 0 }; // simulator has 32 byte storage
+	char tx[1] = { 0 }; // specify start address in simulator (eeprom type addressing, 8-bit address)
+	i2c.transaction(0x42, (uint8_t *) tx, 1, (uint8_t *) data, 32);
+	if(strcmp(data, "Signal capture")==0) {
+		simulator = true;
+	} else simulator = false;
+
 	outofbounds = false;
 	inmotion = false; // setup so that we're prepared to draw && turn on laser, but keep it off when power is set.
 	curpenpos = penup;
@@ -177,8 +189,16 @@ void DrawControl::intsetLaser( uint16_t power )
 		LPC_SCT1->MATCHREL[1].L = match;
 	} else
 	{
-	    LPC_SCT1->OUT[1].SET = 0; // event 3 has no effect on  SCTx_OUT1 --> laser is always off
-		LPC_SCT1->MATCHREL[1].L = 1;
+		if ( simulator ) // set power to 2% on simulator so that detects faster, rather than true off.
+		{
+			uint16_t match = 20;
+		    LPC_SCT1->OUT[1].SET = (1 << 2); // event 2 will set SCTx_OUT1
+			LPC_SCT1->MATCHREL[1].L = match;
+		} else
+		{
+		    LPC_SCT1->OUT[1].SET = 0; // event 3 has no effect on  SCTx_OUT1 --> laser is always off
+			LPC_SCT1->MATCHREL[1].L = 1;
+		}
 	}
 	// clear and restart timer
 	LPC_SCT1 -> CTRL_L &= ~((1 << 2) + (1 << 3));

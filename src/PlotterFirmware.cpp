@@ -9,7 +9,7 @@
 */
 
 #define SPEEDSLOW  1000
-#define SPEEDFAST  4000
+#define SPEEDFAST  3800
 
 #if defined (__USE_LPCOPEN)
 #if defined(NO_BOARD_LIB)

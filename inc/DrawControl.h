@@ -44,6 +44,7 @@ private:
 	uint8_t curpenpos;
 	bool outofbounds;
 	bool inmotion;
+	bool simulator;
 };
 
 #endif /* DRAWCONTROL_H_ */

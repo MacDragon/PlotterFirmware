@@ -28,11 +28,6 @@
 
 static MotorXY *MXY;
 
-
-volatile uint32_t isrleave = 0;
-
-
-
 extern "C" void RIT_IRQHandler(void) {
 	portBASE_TYPE xHigherPriorityTaskWoken = pdFALSE;
 
@@ -222,8 +217,6 @@ void MotorXY::isr(portBASE_TYPE *xHigherPriorityWoken){
 		xSemaphoreGiveFromISR(sbRIT, xHigherPriorityWoken);
 	}
 
-	isrleave = DWT->CYCCNT;
-
 	// End the ISR and (possibly) do a context switch
 }
 
@@ -318,7 +311,6 @@ int32xy_t MotorXY::RIT_start(int count1, int count2, int usstart, int usmax, uin
 		if( xSemaphoreTake(sbRIT, portMAX_DELAY) == pdTRUE) {
 			// Disable the interrupt signal in NVIC (the interrupt controller)
 			NVIC_DisableIRQ(RITIMER_IRQn);
-			volatile uint32_t isrback = DWT->CYCCNT-isrleave;
 
 			draw->ismoving( false );
 
@@ -336,8 +328,8 @@ int32xy_t MotorXY::RIT_start(int count1, int count2, int usstart, int usmax, uin
 			// unexpected error
 			return {-1,-1};
 		}
-		return {0,0}; // if we got here no movement happened.
 	}
+	return {0,0}; // if we got here no movement happened.
 }
 
 
@@ -460,6 +452,9 @@ bool MotorXY::trackinit() {
 
 	gotoxy( {-99999,0}, false, ppsslow, true );
 
+	// 50ms delays to ensure switch bounce has settled during calibration.
+
+	// instantaneus reads in RIT interrupt seem to work ok, but could be refactored to interrupt flags.
 	vTaskDelay(50);
 
 	LimitXL = getActiveLimit();

@@ -281,7 +281,6 @@
 							<tool id="com.crt.advproject.tool.debug.release.778114577" name="MCU Debugger" superClass="com.crt.advproject.tool.debug.release"/>
 						</toolChain>
 					</folderInfo>
-					<fileInfo id="com.crt.advproject.config.exe.release.409487256.1829477760" name="PlotterFirmware LinkServer Release.launch" rcbsApplicability="disable" resourcePath="PlotterFirmware LinkServer Release.launch" toolsToInvoke=""/>
 					<sourceEntries>
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="inc"/>
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/>

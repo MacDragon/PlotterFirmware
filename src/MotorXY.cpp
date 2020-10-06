@@ -104,11 +104,15 @@ void MotorXY::isr(portBASE_TYPE *xHigherPriorityWoken){
 						   RIT_D = RIT_D + 2*RIT_totalcount2;
 				} else if ( RIT_totalcount2 != 0 && (this->*Step2Limit)() ) // ensure we stop if we hit axis 2
 				{
-					// not yet set pin high, so can leave state as is.
-
-					Chip_RIT_Disable(LPC_RITIMER); // disable timer
-					// Give semaphore and set context switch flag if a higher priority task was woken up
-					xSemaphoreGiveFromISR(sbRIT, xHigherPriorityWoken);
+					if (  RIT_D > 0 ) // if we actually want to move another step, then stop.
+					{
+						// not yet set pin high, so can leave state as is.
+						Chip_RIT_Disable(LPC_RITIMER); // disable timer
+						// Give semaphore and set context switch flag if a higher priority task was woken up
+						xSemaphoreGiveFromISR(sbRIT, xHigherPriorityWoken);
+						return;
+					} else
+						   RIT_D = RIT_D + 2*RIT_totalcount2;
 				}
 
 				// check if we're actually in plottable area.
@@ -232,7 +236,8 @@ void MotorXY::write(const char *str) {
 	}
 }
 
-// accel in rpm/s, default to linear ramp if not given.
+
+// accel in rpm/s, default to linear ramp if not given. skip accel starts curve from start speed rather than 0.
 int32xy_t MotorXY::RIT_start(int count1, int count2, int usstart, int usmax, uint32_t accel, bool skipaccel ) {
 	// Determine approximate compare value based on clock rate and passed interval
 
@@ -419,7 +424,7 @@ int32xy_t MotorXY::domove(int32xy_t move, uint32_t initialpps,
 DigitalIoPin * MotorXY::getActiveLimit( void )
 {
 	int ylimit = 0;
-	if ( ymotor )
+	if ( ymotor ) // check if we have both axes active.
 	{
 		 ylimit = Limit3->read() + Limit4->read();
 	}
@@ -560,9 +565,10 @@ bool MotorXY::trackinit() {
 
 	for ( int i=0;i<INITRUNS;i++)
 	{
-		 // move to limit switch with a larger than possible move, add previous correction to account for not being on limit switch anymore.
+		 // move to just short of limit switch with fast accelerated movement.
 		moved = domove({approxwidth,approxheight}, ppsslow, ppsfast, direction, direction, false );
 
+		// do slower individual moves into limit switches.
 		int32xy_t small=domove({20,0}, ppsslow, ppsslow, direction, none, false );
 		abspos.x+=moved.x+small.x;
 
@@ -576,6 +582,7 @@ bool MotorXY::trackinit() {
 			moved.y += small.y;
 		}
 
+		// check if this distance is wider than previously discovered
 		if ( moved.x > widest ) widest = moved.x;
 
 		write("Moved ");
@@ -605,16 +612,14 @@ bool MotorXY::trackinit() {
 	write(getnumstr(widest));
 	write(" steps\r\n");
 
-//	printxpos(xpos); // 2639 = 2644 in sim, which is correct
-	// move to center.
-	// move of 1319
+
 	write("Moving ");
-	write(getnumstr(width/2));//-abs(correction.X)));
+	write(getnumstr(width/2));
 	write("x ");
-	write(getnumstr(height/2));//-abs(correction.Y)));
+	write(getnumstr(height/2));
 	write("y to center.\r\n");
 
-	moved = domove({width/2/*-abs(correction.X)*/,height/2/*-abs(correction.Y)*/}, ppsslow, ppsslow, direction, direction, false );
+	moved = domove({width/2,height/2}, ppsslow, ppsslow, direction, direction, false );
 
 	correction = {0,0};
 	abspos.x+=moved.x;
@@ -624,27 +629,6 @@ bool MotorXY::trackinit() {
 
 	return true;
 }
-
-/*
-
-int32xy_t addXY( int32xy_t val1, int32xy_t val2 )
-{
-	return {val1.X + val2.X, val1.Y + val2.Y };
-}
-
-int32xy_t subXY( int32xy_t val1, int32xy_t val2 )
-{
-	return {val1.X - val2.X, val1.Y - val2.Y };
-}
-
-bool cmpXY( int32xy_t val1, int32xy_t val2 )
-{
-	if ( val1.X == val2.X && val1.Y == val2.Y )
-		return true;
-	else
-		return false;
-}
-*/
 
 int32xy_t MotorXY::gotoxy( int32xy_t move, bool absolute, uint32_t speed, bool limit, uint32_t rpm, bool skipaccel ) {
 	XYdir xdir;
@@ -818,9 +802,6 @@ int32xy_t MotorXY::gotomid() {
 void MotorXY::setPPS(int32_t ppsslow, int32_t ppsfast ) {
 	this->ppsslow = ppsslow;
 	this->ppsfast = ppsfast;
-}
-
-void MotorXY::setaccel(int32_t accel) {
 }
 
 int MotorXY::getwidth() {

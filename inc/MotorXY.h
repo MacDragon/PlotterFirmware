@@ -23,6 +23,9 @@
 #define MINDELAY (144000)
 #define INITRUNS (3)
 
+
+// config structure defining all the pins and initial direction and speeds
+// and steps per revolution of stepper for acceleration calculations.
 struct MotorConfig {
 	PinMap motorx;
 	PinMap motory;
@@ -46,35 +49,52 @@ public:
 	MotorXY(const MotorConfig &cfg, DrawControl *Draw = nullptr, LpcUart *UART = nullptr);
 	MotorXY(const MotorXY &) = delete; // don't allow copy
 	virtual ~MotorXY();
-	int32xy_t gotoxy( int32xy_t move, bool absolute, uint32_t speed = 0, bool limit = false, uint32_t rpm = 0, bool skipaccel = true );
+
+	// run initial track initialisation to detect limit switches and size of stepper tracks.
 	bool trackinit();
+
+	// move to position xy in either relative or absolute terms, with optional faster speed/acceleration settings, and limit switch stop.
+	int32xy_t gotoxy( int32xy_t move, bool absolute, uint32_t speed = 0, bool limit = false, uint32_t rpm = 0, bool skipaccel = true );
+
+	// rehome steppers to either end of track. Forcelimit uses limit switches to stop rather than relative position.
 	int32xy_t gotohome( XYdir xdir, XYdir ydir, bool forcelimit = false );
+
+	// goto middle of plotter area.
 	int32xy_t gotomid();
-	void setPPS(int32_t ppsslow, int32_t ppsfast );
-	void setaccel( int32_t accel );
+
+	// set speed for plotting and moving
+	void setPPS(int32_t ppsslow, int32_t ppsfast);
+
+	// set stepper direction for M5
 	void setInvert( bool xinv, bool yinv );
 
+	// getters for calling program to know details about plotter area/position.
+
+	// these functions return virtual position that can be in or outside plottable area.
 	int  getxpos();
 	int  getypos();
+	// abs position only gives actual plotter head position within real travelable area.
 	int  getabsxpos();
 	int  getabsypos();
 
+	// returns track sizes. Max width designed for speed test, in case there was any variation during init.
 	int  getwidth();
 	int  getmaxwidth();
 	int  getheight();
 
-	void toggledir(XYdir &dir);
-
-	void isr(portBASE_TYPE *hpw); /* ISR handler. This will be called by the HW ISR handler. Do not call from application */
-
-	// recovery no longer needed.
-	int32xy_t dorecovery( XYdir xdirection, XYdir ydirection ); // recovery from direction in movement direction.
+	/* ISR handler. This will be called by the HW ISR handler. Do not call from application, treat as private */
+	void isr(portBASE_TYPE *hpw);
 
 private:
 	uint32_t drawslow();
 
+	// recovery from limit switch no longer needed except for internal initialisation routine, now private.
+	int32xy_t dorecovery( XYdir xdirection, XYdir ydirection ); // recovery from direction in movement direction.
+	void toggledir(XYdir &dir);
+
 	typedef bool (MotorXY::*LimitFn)();
 
+	// internal variables to track whether track has been initialised on an axis.
 	bool YLimitsSet;
 	bool XLimitsSet;
 
@@ -90,14 +110,18 @@ private:
 
 	int32xy_t plotLine(int32xy_t posstart, int32xy_t posend, bool inside = false );
 
+	// checks whether requested co ordinate is within plottable area.
 	bool inbounds(int32xy_t pos);
 
+	// check if limit switch is active on axis in direction of movement.
 	bool StepXLimit();
-
 	bool StepYLimit();
 
+	// check if any limit switch is active. Used initially before calibration for all movement.
 	bool StepAnyLimit();
 
+	// pointers to limit switches and axis controls so that
+	// interrupt / limit switch checkers don't need to be altered for changes
 	LimitFn 	   Step1Limit;
 	LimitFn		   Step2Limit;
 	LpcUart 	 * uart;
@@ -125,6 +149,7 @@ private:
 	DigitalIoPin * Limit3;
 	DigitalIoPin * Limit4;
 
+	// internal variables for stepper interrupt operation...
 	volatile uint32_t RIT_HalfCount;
 	volatile uint32_t RIT_count1;
 	volatile uint32_t RIT_count2;
@@ -150,22 +175,19 @@ private:
 
 	// ramp state-machine states
 	enum accstate { RAMP_UP, RAMP_MAX, RAMP_DOWN };
+	volatile accstate RIT_accstate;
+
 	int32xy_t abspos;
 	int32xy_t virtpos;
 
 	volatile int32_t width=0;
 	int32_t widest=0;
 	volatile int32_t height=0;
-	bool xfoundaxis=false;
-	bool yfoundaxis=false;
 
-	bool ymotor;
+	bool ymotor; // is y motor present, or are we using a single stepper track for testing.
 
 	uint32_t ppsslow;
-
 	uint32_t ppsfast;
-
-	accstate RIT_accstate;
 
 	uint32_t stepsperrev;
 };

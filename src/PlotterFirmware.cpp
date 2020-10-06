@@ -8,8 +8,11 @@
 ===============================================================================
 */
 
-#define SPEEDSLOW  1000
-#define SPEEDFAST  3800
+// define movement setup.
+#define SPEEDSLOW  		  (1000)
+#define SPEEDFAST  		  (3800) // faster was breaking sim on 1/8 step long moves..
+#define SPEEDACCEL		  (2000) // acceleration in rpm/s^2
+#define STEPS_PER_REV     (400)
 
 #if defined (__USE_LPCOPEN)
 #if defined(NO_BOARD_LIB)
@@ -35,13 +38,8 @@
 #include "helper.h"
 #include "DrawControl.h"
 #include "MotorXY.h"
-#include "DebugPrint.h"
 
 #define ECHO
-
-#define DEBUGMSG
-
-#define STEPS_PER_REV (400)
 
 // defines whether to use debuguart or CDC for the uart connection.
 #define CDC
@@ -358,7 +356,7 @@ static void vGCode(void *pvParameters ){
 				break;
 			case origin:
 				mdrawpos = {0,0};
-				XY->gotoxy({0, 0}, true);
+				XY->gotoxy({0, 0}, true, 0, SPEEDACCEL);
 				printOK();
 				break;
 			case goxy:
@@ -378,7 +376,7 @@ static void vGCode(void *pvParameters ){
 				// scale factor?
 
 				starttime = xTaskGetTickCount();
-				XY->gotoxy({(parsed.pos.x*100)/xfact, (parsed.pos.y*100)/yfact}, true); // always absolute value.
+				XY->gotoxy({(parsed.pos.x*100)/xfact, (parsed.pos.y*100)/yfact}, true, 0, SPEEDACCEL); // always absolute value.
 				runtime = xTaskGetTickCount()-starttime;
 				snprintf(gcode, 79,  "Move took %ld ms\r\n",runtime );
 				uart->write(gcode);
@@ -545,8 +543,6 @@ int main(void) {
 	xTaskCreate(vGCode, "GCode Parser",
 				300, NULL, (tskIDLE_PRIORITY + 4UL),
 				(TaskHandle_t *) NULL);
-
-	SetupDebugPrint(uart);
 
 	xTaskCreate(vLimit, "Limit Switch Read", // lowest priority task, only visual indication.
 			100, NULL, (tskIDLE_PRIORITY + 2UL),

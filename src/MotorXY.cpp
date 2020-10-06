@@ -91,31 +91,29 @@ void MotorXY::isr(portBASE_TYPE *xHigherPriorityWoken){
 
 		if ( ! Step1->read() )
 		{
-			if  ( ! (this->*Step1Limit)()) // only allow sending pulse if not limited.
+			if  ( ! (this->*Step1Limit)()) // only allow sending pulse if not limited on primary axis.
 			{
 				if ( RIT_totalcount2 != 0 && ! (this->*Step2Limit)() )
 				{
-					if (  RIT_D > 0 )
+					if (  RIT_D > 0 ) // Bresentham algo says we want to move on secondary axis.
 					{
 						   Step2->write(true);
 						   RIT_count2++;
-						   RIT_D = RIT_D + (2 * (RIT_totalcount2 - RIT_totalsteps));
+						   RIT_D = RIT_D + (2 * (RIT_totalcount2 - RIT_totalsteps)); // calculate next Bresentham step.
 					} else
 						   RIT_D = RIT_D + 2*RIT_totalcount2;
 				} else if ( RIT_totalcount2 != 0 && (this->*Step2Limit)() ) // ensure we stop if we hit axis 2
 				{
-					if (  RIT_D > 0 ) // if we actually want to move another step, then stop.
+					if (  RIT_D > 0 ) // if we actually want to move another step on axis 2 whilst at limit, then stop.
 					{
-						// not yet set pin high, so can leave state as is.
 						Chip_RIT_Disable(LPC_RITIMER); // disable timer
-						// Give semaphore and set context switch flag if a higher priority task was woken up
 						xSemaphoreGiveFromISR(sbRIT, xHigherPriorityWoken);
 						return;
 					} else
 						   RIT_D = RIT_D + 2*RIT_totalcount2;
 				}
 
-				// check if we're actually in plottable area.
+				// not being limited in movement by either axis limit switch, proceed
 
 				Step1->write(true); // only start a step cycle if limit switches not hit.
 				RIT_count1++;
@@ -193,14 +191,14 @@ void MotorXY::isr(portBASE_TYPE *xHigherPriorityWoken){
 			} else
 			{
 				// not yet set pin high, so can leave state as is.
-
 				Chip_RIT_Disable(LPC_RITIMER); // disable timer
 				// Give semaphore and set context switch flag if a higher priority task was woken up
 				xSemaphoreGiveFromISR(sbRIT, xHigherPriorityWoken);
+				return;
 			}
 		}
 		else
-		{
+		{  // we're in down phase of square wave, set pins back to false, adjust timer to next step if in acceleration phase.
 			Step1->write(false);
 			Step2->write(false);
 			// adjust timer after a full cycle.
@@ -210,15 +208,17 @@ void MotorXY::isr(portBASE_TYPE *xHigherPriorityWoken){
 				LPC_RITIMER->COMPVAL = (uint32_t) RIT_cur; // only using 32 bit part so save a write maybe.
 				Chip_RIT_Enable(LPC_RITIMER);
 			}
+			return;
 		}
 	}
-	else {
+	else { // reached end of wanted steps, make sure everything is set to known low state.
 		Step1->write(false); // BUG, was not setting low on last step, leaving pin in wrong state!
 		Step2->write(false);
 		Chip_RIT_Disable(LPC_RITIMER); // disable timer
 		// Give semaphore and set context switch flag if a higher priority task was woken up
 
 		xSemaphoreGiveFromISR(sbRIT, xHigherPriorityWoken);
+		return;
 	}
 
 	// End the ISR and (possibly) do a context switch
@@ -229,6 +229,7 @@ void MotorXY::toggledir(XYdir &dir) {
 	else if ( dir == right ) dir = left;
 }
 
+// write debug messages to uart if uart defined.
 void MotorXY::write(const char *str) {
 	if ( uart != nullptr )
 	{
@@ -236,17 +237,19 @@ void MotorXY::write(const char *str) {
 	}
 }
 
-
 // accel in rpm/s, default to linear ramp if not given. skip accel starts curve from start speed rather than 0.
+// timer does not know which axis is which so that it can be kept simpler, uses pointers to axis objects
 int32xy_t MotorXY::RIT_start(int count1, int count2, int usstart, int usmax, uint32_t accel, bool skipaccel ) {
 	// Determine approximate compare value based on clock rate and passed interval
 
 	RIT_begin = (uint64_t) Chip_Clock_GetSystemClockRate() * (uint64_t) ( usstart /2 ) / 1000000;
 	RIT_end = (uint64_t) Chip_Clock_GetSystemClockRate() * (uint64_t) ( usmax / 2 ) / 1000000;
 
-	RIT_cur = RIT_begin;
+	RIT_cur = RIT_begin; // set rit timer initial period whether accelerating or not
 
-	if ( accel == 0 )
+	// linear curve acceleration based on algorhythm from article https://www.embedded.com/generate-stepper-motor-speed-profiles-in-real-time/
+
+	if ( accel == 0 ) // if accel not specified then use simple linear ramp on timer. Not efficient, but simple.
 	{
 		RIT_accelrate = false;
 				//  10% travel
@@ -256,7 +259,7 @@ int32xy_t MotorXY::RIT_start(int count1, int count2, int usstart, int usmax, uin
 		RIT_step = ( RIT_begin-RIT_end ) / RIT_accelsteps;
 	} else
 	{
-		RIT_accelrate = true;
+		RIT_accelrate = true; // using a true curve to achieve actual linear acceleration.
 
 		RIT_cur = RIT_begin; 											// constant to go from rpm/s to rad/s^2
 		RIT_curacc = ( 0.676*Chip_Clock_GetSystemClockRate()*sqrt(( 2*degToRad(360.0/stepsperrev) )/( accel * 0.1047197551143) ) ) / 2;
@@ -266,6 +269,8 @@ int32xy_t MotorXY::RIT_start(int count1, int count2, int usstart, int usmax, uin
 
 		RIT_skippedaccel=0;
 
+		// if we want to start movement at defined slow move speed
+		// calculate how many acceleration steps to skip later on deceleration so we don't decelerate too early.
 		if ( skipaccel )
 		{
 			// skip initial part of acceleration curve to point we know is OK to start from.
@@ -283,12 +288,13 @@ int32xy_t MotorXY::RIT_start(int count1, int count2, int usstart, int usmax, uin
 	// disable timer during configuration
 	Chip_RIT_Disable(LPC_RITIMER);
 
+	// setup how many steps to move for ISR.
 	RIT_count1 = 0;
 	RIT_totalsteps = count1;
 	RIT_count2 = 0;
 	RIT_totalcount2 = count2;
 
-	RIT_HalfCount = (count1 + 1) >> 1; // midpoint, rounded up
+	RIT_HalfCount = (count1 + 1) >> 1; // midpoint, rounded up, to ensure acceleration stops by here so we can still decelerate.
 
     RIT_D = (2 * count2) - count1;
 
@@ -302,25 +308,24 @@ int32xy_t MotorXY::RIT_start(int count1, int count2, int usstart, int usmax, uin
 
 	uint32_t starttime = xTaskGetTickCount();
 
+	// if there are actual steps to move then start timer and wait for it to complete steps
 	if ( RIT_totalsteps > 0 )
 	{
-
-		draw->ismoving( true );
+		draw->ismoving( true ); // tell drawing object that we are about to move, so that laser can be switched on if needed.
 
 		Chip_RIT_Enable(LPC_RITIMER);
 		// Enable the interrupt signal in NVIC (the interrupt controller)
 		NVIC_EnableIRQ(RITIMER_IRQn);
 		// wait for ISR to tell that we're done
 
-
 		if( xSemaphoreTake(sbRIT, portMAX_DELAY) == pdTRUE) {
 			// Disable the interrupt signal in NVIC (the interrupt controller)
 			NVIC_DisableIRQ(RITIMER_IRQn);
 
-			draw->ismoving( false );
+			draw->ismoving( false ); // done moving so inform laser can be turned off if needed.
 
 			uint32_t runtime = xTaskGetTickCount()-starttime;
-			write("interrupt  took ");
+			write("interrupt  took "); // debug output of how long move took
 			write(getnumstr(runtime));
 			write("ms to process ");
 			write(getnumstr(RIT_count1));
@@ -329,8 +334,8 @@ int32xy_t MotorXY::RIT_start(int count1, int count2, int usstart, int usmax, uin
 			return {(int32_t)RIT_count1, (int32_t)RIT_count2}; // return how many steps moved.
 		}
 		else {
-			draw->ismoving( false );
-			// unexpected error
+			draw->ismoving( false ); // done moving so inform laser can be turned off if needed.
+			// unexpected error. Shouldn't ever be here... not currently handled gracefully.
 			return {-1,-1};
 		}
 	}
@@ -338,26 +343,26 @@ int32xy_t MotorXY::RIT_start(int count1, int count2, int usstart, int usmax, uin
 }
 
 
-
+// internal move command to setup axes for interrupt, assigning correct axes objects to timer used pointers.
+// and after move assigns movement performed move to correct x/y axis.
 int32xy_t MotorXY::domove(int32xy_t move, uint32_t initialpps,
 				 uint32_t maxpps, XYdir xdirection, XYdir ydirection,
 				 bool supress, uint32_t rpm, bool skipaccel)
 {
 	int32xy_t moved = {0,0};
 
-	if ( !ymotor )
+	if ( !ymotor ) // only perform y movement if we have a defined y axis.
 	{
 		move.y = 0;
 	}
 
-	if ( maxpps == 0 ) maxpps = initialpps;
+	if ( maxpps == 0 || maxpps < initialpps ) maxpps = initialpps; // ensure that we are moving at initial pps as minimum.
 
-	if ( move.x > 0 || move.y > 0 )
+	if ( move.x > 0 || move.y > 0 ) // if there is a move to actually perform check axes.
 	{
-		write("\r\nDomove: moving ");
+		write("\r\nDomove: moving "); // just some debug messaging to inform of move request magnitude.
 		if ( move.x > 0)
 		{
-
 			write(getnumstr(move.x));
 			write(" steps ");
 			if ( xdirection == left )
@@ -380,17 +385,18 @@ int32xy_t MotorXY::domove(int32xy_t move, uint32_t initialpps,
 		DirX->write(xdirection);
 		DirY->write(ydirection);
 
-		if ( move.x < move.y )
+		if ( move.x < move.y ) // check if we are in a steep line for Bresentham
 		{
-			Step1 = StepY;
+			Step1 = StepY; // if so then swap x/y axes order to 2/1 for ISR calls, so that axis with larger movement is primary.
 			Step2 = StepX;
 			Step1Limit = &MotorXY::StepYLimit;
 			Step2Limit = &MotorXY::StepXLimit;
+			// request actual movement
 			moved =  RIT_start( move.y, move.x, 1000000/initialpps, 1000000/maxpps, rpm, skipaccel); // 1us = 1000000 hz, so divide this by desired pps
 			int32_t temp = moved.x;
 			moved.x = moved.y;
 			moved.y = temp;
-		} else
+		} else // axis not swapped, proceed with x/y as 1/2
 		{
 			Step1 = StepX;
 			Step2 = StepY;
@@ -399,20 +405,17 @@ int32xy_t MotorXY::domove(int32xy_t move, uint32_t initialpps,
 			moved =  RIT_start( move.x, move.y, 1000000/initialpps, 1000000/maxpps, rpm, skipaccel); // 1us = 1000000 hz, so divide this by desired pps
 		}
 
-		if ( moved.x != move.x  || moved.y != move.y )
+		if ( moved.x != move.x  || moved.y != move.y ) // if movement did not fully complete, a limit switch was hit.
 		{
-	//		if ( ! supress )
-			{
-				write("\r\nError: Limit switch hit with ");
-				write(getnumstr(move.x-moved.y));
-				write(" steps left.\r\n");
-			}
+			write("\r\nError: Limit switch hit with ");
+			write(getnumstr(move.x-moved.y));
+			write(" steps left.\r\n");
 		}
 		if ( xdirection == left ) moved.x=0-moved.x; // return negative movement for left
-		if ( ydirection == down ) moved.y=0-moved.y; // return negative movement for left
+		if ( ydirection == down ) moved.y=0-moved.y; // return negative movement for down
 	}
 
-	if ( supress ) // don't inform errors, calculate actual end position.
+	if ( supress ) // if supression requested don't inform errors, just return original requested movement.
 	{
 		return move;
 	} else
@@ -429,9 +432,9 @@ DigitalIoPin * MotorXY::getActiveLimit( void )
 		 ylimit = Limit3->read() + Limit4->read();
 	}
 
-	if (  Limit1->read() + Limit2->read() + ylimit != 1 )
+	if (  Limit1->read() + Limit2->read() + ylimit != 1 ) // read limit switches.
 	{
-		write("Error: did not stop on limit switch on home run");
+		write("Error: did not stop on limit switch on home run"); // active limit only used during init before calibration.
 		return nullptr;
 	} else
 	{
@@ -448,6 +451,7 @@ DigitalIoPin * MotorXY::getActiveLimit( void )
 
 }
 
+// automated discovery of limit switches and track lengths.
 bool MotorXY::trackinit() {
 	int32xy_t correction = {0,0};
 	// home to left, returns when hit limit switch. For first move, no care how many steps left, just that we get to switch
@@ -458,8 +462,8 @@ bool MotorXY::trackinit() {
 	gotoxy( {-99999,0}, false, ppsslow, true );
 
 	// 50ms delays to ensure switch bounce has settled during calibration.
-
 	// instantaneus reads in RIT interrupt seem to work ok, but could be refactored to interrupt flags.
+
 	vTaskDelay(50);
 
 	LimitXL = getActiveLimit();
@@ -531,7 +535,6 @@ bool MotorXY::trackinit() {
 
 		if ( ymotor )
 			YLimitsSet = true;
-//		correction = dorecovery(none, up);
 		abspos.y += moved.y;//+correction.y;
 	} else abspos.y=0;
 
@@ -630,6 +633,7 @@ bool MotorXY::trackinit() {
 	return true;
 }
 
+// primary movement command.
 int32xy_t MotorXY::gotoxy( int32xy_t move, bool absolute, uint32_t speed, bool limit, uint32_t rpm, bool skipaccel ) {
 	XYdir xdir;
 	XYdir ydir;
@@ -652,7 +656,6 @@ int32xy_t MotorXY::gotoxy( int32xy_t move, bool absolute, uint32_t speed, bool l
 	 // check if move is starting outside drawable area, calculate out of bounds part of move instead of performing
 	if ( ! inbounds(virtpos) )
 	{
-
 		// virtually draw line and see if it intersects with bounds.
 		virtpos = plotLine(virtpos, move+virtpos);
 

@@ -18,7 +18,7 @@
 
 #include <cmath>
 
-struct int32xy_t {
+struct int32xy_t { // helper class to contain a coordinate and perform addition/subtraction on them.
 	int32_t x;
 	int32_t y;
 

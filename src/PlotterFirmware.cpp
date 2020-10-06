@@ -339,8 +339,10 @@ static void vGCode(void *pvParameters ){
 				xfact = ((EEProm->getXSize()*10000) / XY->getwidth());
 				yfact = ((EEProm->getYSize()*10000) / XY->getheight());
 
-				if ( parsed.stepper.speed == 99 ) parsed.stepper.speed = 100; // mdraw doesn't allow 100%, so use 99% as 100%
-								;
+				if ( parsed.stepper.speed <  0 ) parsed.stepper.speed = 1;
+				else if ( parsed.stepper.speed >= 100 ) parsed.stepper.speed = 100;
+				else if ( parsed.stepper.speed < 100 ) parsed.stepper.speed++; // work around that mdraw speed scale is 0-99% 1-100% makes more sense.
+
 				XY->setPPS(((SPEEDSLOW*100)*(parsed.stepper.speed*100)/100)/10000, SPEEDFAST );
 				XY->setInvert((parsed.stepper.A==0)?false:true, (parsed.stepper.B==0)?false:true);
 

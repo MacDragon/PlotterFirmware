@@ -38,6 +38,7 @@ struct MotorConfig {
 	uint32_t steps;
 	uint32_t ppsslow;
 	uint32_t ppsfast;
+	uint32_t accelrpm;
 	bool   invertx = false;
 	bool   inverty = false;
 };
@@ -188,6 +189,7 @@ private:
 
 	uint32_t ppsslow;
 	uint32_t ppsfast;
+	uint32_t accelrpm;
 
 	uint32_t stepsperrev;
 };

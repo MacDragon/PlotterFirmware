@@ -569,7 +569,7 @@ bool MotorXY::trackinit() {
 	for ( int i=0;i<INITRUNS;i++)
 	{
 		 // move to just short of limit switch with fast accelerated movement.
-		moved = domove({approxwidth,approxheight}, ppsslow, ppsfast, direction, direction, false );
+		moved = domove({approxwidth,approxheight}, ppsslow, ppsfast, direction, direction, false, 0 );//accelrpm );
 
 		// do slower individual moves into limit switches.
 		int32xy_t small=domove({20,0}, ppsslow, ppsslow, direction, none, false );
@@ -1075,6 +1075,7 @@ MotorXY::MotorXY(const MotorConfig &cfg, DrawControl *Draw, LpcUart *UART ) {
 
 	ppsslow = cfg.ppsslow; // set default safe speed at init.
 	ppsfast = cfg.ppsfast;
+	accelrpm = cfg.accelrpm;
 
 	sbRIT = xSemaphoreCreateBinary();
 

@@ -10,7 +10,7 @@
 
 // define movement setup.
 #define SPEEDSLOW  		  (1000)
-#define SPEEDFAST  		  (3800) // faster was breaking sim on 1/8 step long moves..
+#define SPEEDFAST  		  (4000) // faster was breaking sim on 1/8 step long moves..
 #define SPEEDACCEL		  (2000) // acceleration in rpm/s^2
 #define STEPS_PER_REV     (400)
 
@@ -338,6 +338,9 @@ static void vGCode(void *pvParameters ){
 				ITM_write("Stepper data saved.\n");
 				xfact = ((EEProm->getXSize()*10000) / XY->getwidth());
 				yfact = ((EEProm->getYSize()*10000) / XY->getheight());
+
+				if ( parsed.stepper.speed == 99 ) parsed.stepper.speed = 100; // mdraw doesn't allow 100%, so use 99% as 100%
+								;
 				XY->setPPS(((SPEEDSLOW*100)*(parsed.stepper.speed*100)/100)/10000, SPEEDFAST );
 				XY->setInvert((parsed.stepper.A==0)?false:true, (parsed.stepper.B==0)?false:true);
 
@@ -516,7 +519,8 @@ int main(void) {
 	Limit4 = new DigitalIoPin(Lim4P.port,Lim4P.pin,true, true, true);
 
 	MotorConfig mcfg = { MotorX, MotorY, DirX, DirY, Lim1P, Lim2P, Lim3P, Lim4P,
-			STEPS_PER_REV, (uint32_t)((SPEEDSLOW*100)*(EEProm->getSpeed()*100)/100)/10000, SPEEDFAST, EEProm->getXDir(), EEProm->getYDir() };
+			STEPS_PER_REV, (uint32_t)((SPEEDSLOW*100)*(EEProm->getSpeed()*100)/100)/10000,
+			SPEEDFAST, SPEEDACCEL, EEProm->getXDir(), EEProm->getYDir() };
 
 	Draw = new DrawControl( PenP, EEProm->getPUp(),EEProm->getPDown(), LaserP );
 

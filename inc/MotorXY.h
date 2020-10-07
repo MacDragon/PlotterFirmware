@@ -41,6 +41,7 @@ struct MotorConfig {
 	uint32_t accelrpm;
 	bool   invertx = false;
 	bool   inverty = false;
+	QueueHandle_t xLEDQ;
 };
 
 
@@ -104,6 +105,8 @@ private:
 
 	DigitalIoPin * getActiveLimit( void );
 	void write(const char * str);
+	void sendLED( const uint32_t msg );
+
 	int32xy_t RIT_start(int count1, int count2, int usstart, int usmax, uint32_t accel, bool skipaccel = true );
 	int32xy_t domove(int32xy_t move, uint32_t initialpps,
 					 uint32_t maxpps, XYdir xdirection, XYdir ydirection,
@@ -192,6 +195,7 @@ private:
 	uint32_t accelrpm;
 
 	uint32_t stepsperrev;
+	QueueHandle_t xLEDQ;
 };
 
 #endif /* MOTORXY_H_ */

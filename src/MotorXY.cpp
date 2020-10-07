@@ -471,6 +471,7 @@ bool MotorXY::trackinit() {
 	if ( LimitXL == nullptr )
 	{
 		write("Error: did not stop on a single limit switch on home run\r\n");
+		sendLED(1);
 		return false;
 	}
 
@@ -491,6 +492,7 @@ bool MotorXY::trackinit() {
 		if ( LimitYD == nullptr )
 		{
 			write("Error: did not stop on a single limit switch on home run\r\n");
+			sendLED(1);
 			return false;
 		}
 
@@ -510,6 +512,7 @@ bool MotorXY::trackinit() {
 	if ( LimitXR == nullptr )
 	{
 		write("Error: did not stop on a single limit switch on home run\r\n");
+		sendLED(1);
 		return false;
 	}
 
@@ -530,6 +533,7 @@ bool MotorXY::trackinit() {
 		if ( LimitYU == nullptr && ymotor )
 		{
 			write("Error: did not stop on a single limit switch on home run\r\n");
+			sendLED(1);
 			return false;
 		}
 
@@ -549,6 +553,7 @@ bool MotorXY::trackinit() {
 	if ( abspos.x < 50 || (abspos.y < 50 && ymotor ) )
 	{
 		write("Error: did not Find limits wide enough apart\r\n");
+		sendLED(1);
 		return false;
 	}
 
@@ -599,6 +604,7 @@ bool MotorXY::trackinit() {
 		if ( ! StepAnyLimit() )
 		{
 			write("Error: did not stop on limit switch\r\n");
+			sendLED(1);
 			return false;
 		}
 
@@ -629,6 +635,8 @@ bool MotorXY::trackinit() {
 	abspos.y+=moved.y;
 
 	virtpos = abspos; // sync real and virtual positions after init.
+
+	sendLED(0);
 
 	return true;
 }
@@ -1051,6 +1059,14 @@ void MotorXY::setInvert(bool xinv, bool yinv)
 	}
 }
 
+void MotorXY::sendLED( const uint32_t msg )
+{
+	if ( xLEDQ != nullptr )
+	{
+		xQueueSendToBack( xLEDQ, &msg, portMAX_DELAY );
+	}
+}
+
 
 MotorXY::MotorXY(const MotorConfig &cfg, DrawControl *Draw, LpcUart *UART ) {
 	if ( MXY != nullptr ) return; // already created, can't have a second control object.
@@ -1064,6 +1080,12 @@ MotorXY::MotorXY(const MotorConfig &cfg, DrawControl *Draw, LpcUart *UART ) {
 		draw = nullptr;
 	else
 		draw = Draw;
+
+
+	if ( cfg.xLEDQ == nullptr )
+		xLEDQ = nullptr;
+	else
+		xLEDQ = cfg.xLEDQ;
 
 	stepsperrev = cfg.steps;
 

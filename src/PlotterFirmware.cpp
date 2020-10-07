@@ -10,7 +10,7 @@
 
 // define movement setup.
 #define SPEEDSLOW  		  (1000)
-#define SPEEDFAST  		  (4000) // faster was breaking sim on 1/8 step long moves..
+#define SPEEDFAST  		  (3800) // faster was breaking sim on 1/8 step long moves..
 #define SPEEDACCEL		  (2000) // acceleration in rpm/s^2
 #define STEPS_PER_REV     (400)
 
@@ -81,6 +81,7 @@ OutputPin * Laser; // 0_12
 OutputPin * Pen; // 0_10
 
 OutputPin * Red; // 0_25
+OutputPin * Green; // 0_3
 OutputPin * Blue; // 1_1
 
 SemaphoreHandle_t xLimit;
@@ -89,6 +90,7 @@ SemaphoreHandle_t xLimit;
 
 // more useful for parse output than input..
 QueueHandle_t xParseQueue;
+QueueHandle_t xLEDQ;
 
 // just a function to putput the OK message for MDRAW as it's used for multiple responses.
 void printOK()
@@ -400,9 +402,11 @@ static void vGCode(void *pvParameters ){
 }
 
 
-static void vLimit(void *pvParameters)
+static void vLED(void *pvParameters)
 {
 	vTaskDelay(100);
+
+	uint32_t msg;
 
 	bool holdingmutex = true;
 	xSemaphoreTake(xAllowMotor, portMAX_DELAY);
@@ -433,16 +437,49 @@ static void vLimit(void *pvParameters)
 	}
 
 	Blue->write(false);
+	Red->write(true); // indicate powered on.
 
 	while (1) {
 
+		if ( xQueueReceive(xLEDQ, &msg, 0)) // we've received led update.
+		{
+			if ( msg == 0)
+			{
+				Green->write(true);
+				Red->write(false);
+			}
+
+			if ( msg == 1) // error state
+			{
+				Green->write(false);
+
+				bool error = true;
+
+				while ( error )
+				{
+					if ( xQueueReceive(xLEDQ, &msg, 0) )
+					{
+						if ( msg == 0 )
+						{
+							error = false;
+							Red->write(false);
+							Green->write(true);
+							break;
+						}
+					}
+					vTaskDelay(100);
+					Red->toggle(); // init fail or other error.
+				}
+			}
+		}
+
 		if ( xSemaphoreTake(xLimit, 0) || Limit1->read() || Limit2->read() || Limit3->read()|| Limit4->read() )
 		{
-			Red->setcounter(500);
+			Blue->setcounter(500);
 		}
 		else
 		{
-			Red->checkcounter();
+			Blue->checkcounter();
 		}
 
 		vTaskDelay(10);
@@ -492,6 +529,7 @@ int main(void) {
 	EEProm = new EEPROM();
 
 	Red = new OutputPin(0,25,true);
+	Green = new OutputPin(0,3,true);
 	Blue = new OutputPin(1,1,true);
 
 	xLimit = xSemaphoreCreateBinary();
@@ -520,17 +558,19 @@ int main(void) {
 	Limit3 = new DigitalIoPin(Lim3P.port,Lim3P.pin,true, true, true);
 	Limit4 = new DigitalIoPin(Lim4P.port,Lim4P.pin,true, true, true);
 
+
+    xLEDQ = xQueueCreate( 10, sizeof( uint32_t ) );
+    vQueueAddToRegistry( xLEDQ, "LED update Queue" );
+
 	MotorConfig mcfg = { MotorX, MotorY, DirX, DirY, Lim1P, Lim2P, Lim3P, Lim4P,
 			STEPS_PER_REV, (uint32_t)((SPEEDSLOW*100)*(EEProm->getSpeed()*100)/100)/10000,
-			SPEEDFAST, SPEEDACCEL, EEProm->getXDir(), EEProm->getYDir() };
+			SPEEDFAST, SPEEDACCEL, EEProm->getXDir(), EEProm->getYDir(), xLEDQ };
 
 	Draw = new DrawControl( PenP, EEProm->getPUp(),EEProm->getPDown(), LaserP );
 
 	XY = new MotorXY(mcfg, Draw, uart );
 
-    // TODO: insert code here
-
-	xUARTMutex = xSemaphoreCreateMutex();
+    // TODO: insert code here	xUARTMutex = xSemaphoreCreateMutex();
 
     xParseQueue = xQueueCreate( 10, sizeof( char[INPUTMAXLEN+1] ) );
     vQueueAddToRegistry( xParseQueue, "Parser input Queue" );
@@ -550,7 +590,7 @@ int main(void) {
 				300, NULL, (tskIDLE_PRIORITY + 4UL),
 				(TaskHandle_t *) NULL);
 
-	xTaskCreate(vLimit, "Limit Switch Read", // lowest priority task, only visual indication.
+	xTaskCreate(vLED, "Limit Switch Read", // lowest priority task, only visual indication.
 			100, NULL, (tskIDLE_PRIORITY + 2UL),
 			(TaskHandle_t *) NULL);
 

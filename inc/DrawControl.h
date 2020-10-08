@@ -24,7 +24,7 @@ public:
 	virtual ~DrawControl();
 
 	void setPen( uint8_t position );
-	void setLaser( uint16_t power );
+	void setLaser( uint8_t power );
 
 	void setPenUpDown( uint8_t penup, uint8_t pendown );
 
@@ -35,9 +35,9 @@ public:
 	void ismoving( bool moving );
 
 private:
-	void intsetLaser( uint16_t power );
+	void intsetLaser( uint8_t power );
 	void intsetPen( uint8_t position );
-	void sctInit( PinMap PenPin, uint16_t position, PinMap LaserPin );
+	void sctInit( PinMap PenPin, uint8_t position, PinMap LaserPin );
 	uint8_t penup;
 	uint8_t pendown;
 	uint8_t curlaser;

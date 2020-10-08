@@ -52,7 +52,7 @@ void DrawControl::SetOutofbounds(bool outside ) {
 
 }
 
-void DrawControl::sctInit( PinMap PenPin, uint16_t position, PinMap LaserPin )
+void DrawControl::sctInit( PinMap PenPin, uint8_t position, PinMap LaserPin )
 {
 	// Enable clock for timer
 
@@ -166,7 +166,7 @@ DrawControl::~DrawControl() {
 }
 
 
-void DrawControl::setLaser( uint16_t power )
+void DrawControl::setLaser( uint8_t power )
 {
 	curlaser = power;
 	if ( ! outofbounds && inmotion )
@@ -176,7 +176,7 @@ void DrawControl::setLaser( uint16_t power )
 
 }
 
-void DrawControl::intsetLaser( uint16_t power )
+void DrawControl::intsetLaser( uint8_t power )
 {
 	LPC_SCT1 -> CTRL_L |= (1 << 2);
 	if ( power > 1 )

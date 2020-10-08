@@ -249,9 +249,9 @@ int32xy_t MotorXY::RIT_start(int count1, int count2, int usstart, int usmax, uin
 
 	// linear curve acceleration based on algorhythm from article https://www.embedded.com/generate-stepper-motor-speed-profiles-in-real-time/
 
-	if ( accel == 0 ) // if accel not specified then use simple linear ramp on timer. Not efficient, but simple.
+	if ( accel == 0 || RIT_end == RIT_begin ) // if accel not specified then use simple linear ramp on timer. Not efficient, but simple.
 	{
-		RIT_accelrate = false;
+		RIT_accelrate = false; // don't use curve acceleration.
 				//  10% travel
 		if ( count1 > 265 )
 			RIT_accelsteps = ( count1 / 10 );

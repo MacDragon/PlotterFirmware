@@ -249,9 +249,11 @@ static void vInput(void *pvParameters)
 				continue;
 			}
 
+#ifdef PARSETASK
+			xQueueSendToBack( xParseQueue, inputstr, portMAX_DELAY );
+#else
 			vGCode(inputstr);
-//			xQueueSendToBack( xParseQueue, inputstr, portMAX_DELAY );
-
+#endif
 			inputpos=0;
 			inputstr[0] = 0;
 
@@ -271,11 +273,14 @@ void printGCode( const char * output )
 	ITM_write(output);
 }
 
-
+#ifdef PARSETASK
+static void vGCode(void *pvParameters ){
+#define input gcode
+}
+#else
 static void vGCode( const char * input) {
-//static void vGCode(void *pvParameters ){
+#endif
 	char gcode[INPUTMAXLEN+1] = "";
-
 	xEventGroupWaitBits(xInit, 2, pdFALSE, pdTRUE, portMAX_DELAY);
 
 	// scaling values by extra 100 allows integer division without losing accuracy to needed precision.
@@ -283,16 +288,20 @@ static void vGCode( const char * input) {
 	int32_t yfact = ((EEProm->getYSize()*10000) / XY->getheight());
 
 	static int32xy_t mdrawpos={0,0};
-
-	uint32_t starttime;
-	uint32_t runtime;
-
-//	while (1)
+#ifdef PARSETASK
+	while (1)
 	{
-//		xQueueReceive(xParseQueue, gcode, portMAX_DELAY);
+		xQueueReceive(xParseQueue, gcode, portMAX_DELAY);
+#else
+	{
+#endif
 		uart->write(gcode);
 		uint32_t starttick = DWT->CYCCNT;
+#ifdef PARSETASK
+	    command parsed = GCodeParser(gcode);
+#else
 	    command parsed = GCodeParser(input);
+#endif
 	    uint32_t ticktime = DWT->CYCCNT - starttick;
 	    snprintf(gcode, 79, " : parse took %ld cycles\r\n", ticktime);
 	    uart->write(gcode);

@@ -49,7 +49,7 @@
 
 // TODO: insert other definitions and declarations here
 
-
+static void vGCode( const char * input);
 void printGCode( const char * output );
 
 extern "C" {
@@ -249,8 +249,8 @@ static void vInput(void *pvParameters)
 				continue;
 			}
 
-
-			xQueueSendToBack( xParseQueue, inputstr, portMAX_DELAY );
+			vGCode(inputstr);
+//			xQueueSendToBack( xParseQueue, inputstr, portMAX_DELAY );
 
 			inputpos=0;
 			inputstr[0] = 0;
@@ -272,7 +272,8 @@ void printGCode( const char * output )
 }
 
 
-static void vGCode(void *pvParameters ){
+static void vGCode( const char * input) {
+//static void vGCode(void *pvParameters ){
 	char gcode[INPUTMAXLEN+1] = "";
 
 	xEventGroupWaitBits(xInit, 2, pdFALSE, pdTRUE, portMAX_DELAY);
@@ -281,17 +282,17 @@ static void vGCode(void *pvParameters ){
 	int32_t xfact = ((EEProm->getXSize()*10000) / XY->getwidth());
 	int32_t yfact = ((EEProm->getYSize()*10000) / XY->getheight());
 
-	int32xy_t mdrawpos={0,0};
+	static int32xy_t mdrawpos={0,0};
 
 	uint32_t starttime;
 	uint32_t runtime;
 
-	while (1)
+//	while (1)
 	{
-		xQueueReceive(xParseQueue, gcode, portMAX_DELAY);
+//		xQueueReceive(xParseQueue, gcode, portMAX_DELAY);
 		uart->write(gcode);
 		uint32_t starttick = DWT->CYCCNT;
-	    command parsed = GCodeParser(gcode);
+	    command parsed = GCodeParser(input);
 	    uint32_t ticktime = DWT->CYCCNT - starttick;
 	    snprintf(gcode, 79, " : parse took %ld cycles\r\n", ticktime);
 	    uart->write(gcode);
@@ -411,7 +412,7 @@ static void vGCode(void *pvParameters ){
 			default:
 				break;
 	    };
-	    vTaskDelay(2); // stop mdraw crashing on receiving OK too fast..
+	    vTaskDelay(1); // stop mdraw crashing on receiving OK too fast..
 	}
 }
 
@@ -638,10 +639,10 @@ int main(void) {
 	XY = new MotorXY(mcfg, Draw, uart );
 
     // TODO: insert code here	xUARTMutex = xSemaphoreCreateMutex();
-
+#ifdef PARSETASK
     xParseQueue = xQueueCreate( 10, sizeof( char[INPUTMAXLEN+1] ) );
     vQueueAddToRegistry( xParseQueue, "Parser input Queue" );
-
+#endif
 #ifdef CDC
 	/* low level USB communicationthread */
 	xTaskCreate(cdc_task, "CDC",
@@ -650,12 +651,13 @@ int main(void) {
 #endif
 	// higher level usb uart input
 	xTaskCreate(vInput, "MDraw Input",
-				250, NULL, (tskIDLE_PRIORITY + 3UL),
+				300, NULL, (tskIDLE_PRIORITY + 3UL),
 				(TaskHandle_t *) NULL);
-
+#ifdef PARSETASK
 	xTaskCreate(vGCode, "GCode Parser",
 				250, NULL, (tskIDLE_PRIORITY + 4UL),
 				(TaskHandle_t *) NULL);
+#endif
 
 #ifdef COMMANDQ
     xCommandQueue = xQueueCreate( 40, sizeof( command ) );

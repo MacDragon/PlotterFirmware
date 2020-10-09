@@ -14,6 +14,8 @@
 #define SPEEDACCEL		  (2000) // acceleration in rpm/s^2
 #define STEPS_PER_REV     (400)
 
+#define COMMANDQ
+
 #if defined (__USE_LPCOPEN)
 #if defined(NO_BOARD_LIB)
 #include "chip.h"
@@ -90,6 +92,7 @@ SemaphoreHandle_t xLimit;
 
 // more useful for parse output than input..
 QueueHandle_t xParseQueue;
+QueueHandle_t xCommandQueue;
 QueueHandle_t xLEDQ;
 
 // just a function to putput the OK message for MDRAW as it's used for multiple responses.
@@ -256,7 +259,6 @@ static void vInput(void *pvParameters)
 	}
 }
 
-
 void printGCode( const char * output )
 {
 #ifdef CDC
@@ -275,6 +277,7 @@ static void vGCode(void *pvParameters ){
 
 	xEventGroupWaitBits(xInit, 2, pdFALSE, pdTRUE, portMAX_DELAY);
 
+	// scaling values by extra 100 allows integer division without losing accuracy to needed precision.
 	int32_t xfact = ((EEProm->getXSize()*10000) / XY->getwidth());
 	int32_t yfact = ((EEProm->getYSize()*10000) / XY->getheight());
 
@@ -283,12 +286,10 @@ static void vGCode(void *pvParameters ){
 	uint32_t starttime;
 	uint32_t runtime;
 
-
 	while (1)
 	{
 		xQueueReceive(xParseQueue, gcode, portMAX_DELAY);
 		uart->write(gcode);
-
 		uint32_t starttick = DWT->CYCCNT;
 	    command parsed = GCodeParser(gcode);
 	    uint32_t ticktime = DWT->CYCCNT - starttick;
@@ -298,10 +299,6 @@ static void vGCode(void *pvParameters ){
 	    {
 // messages expecting explicit reply rather than OK, or data saving.
 			case init:
-
-// saves a bit of stack space not using full sprintf formatting function.
-//	Harder work to write output though, but as this is only complex output needed...
-
 				snprintf(gcode, 79,  "M10 XY %ld %ld 0.00 0.00 A%d B%d H0 S%d U%d D%d\r\n",
 						EEProm->getXSize(),
 						EEProm->getYSize(),
@@ -341,35 +338,49 @@ static void vGCode(void *pvParameters ){
 				xfact = ((EEProm->getXSize()*10000) / XY->getwidth());
 				yfact = ((EEProm->getYSize()*10000) / XY->getheight());
 
+				 // work around that mdraw speed scale is 0-99% 1-100% makes more sense, and limiting values to 100% range.
 				if ( parsed.stepper.speed <  0 ) parsed.stepper.speed = 1;
 				else if ( parsed.stepper.speed >= 100 ) parsed.stepper.speed = 100;
-				else if ( parsed.stepper.speed < 100 ) parsed.stepper.speed++; // work around that mdraw speed scale is 0-99% 1-100% makes more sense.
+				else if ( parsed.stepper.speed < 100 ) parsed.stepper.speed++;
 
 				XY->setPPS(((SPEEDSLOW*100)*(parsed.stepper.speed*100)/100)/10000, SPEEDFAST );
 				XY->setInvert((parsed.stepper.A==0)?false:true, (parsed.stepper.B==0)?false:true);
 
 				printOK();
 				break;
-
-				// the OK messages.
-
 			case setpen:
+#ifdef COMMANDQ
+				xQueueSendToBack( xCommandQueue, &parsed, portMAX_DELAY );
+#else
 				Draw->setPen( parsed.pen.pos );
+#endif
 				printOK();
 				break;
 			case setlaser:
+#ifdef COMMANDQ
+				xQueueSendToBack( xCommandQueue, &parsed, portMAX_DELAY );
+#else
 				Draw->setLaser(parsed.laser.power );
+#endif
 				printOK();
 				break;
 			case origin:
 				mdrawpos = {0,0};
+#ifdef COMMANDQ
+				parsed.cmd = goxy;
+				parsed.pos.x = 0;
+				parsed.pos.y = 0;
+				parsed.pos.abs = 1;
+				xQueueSendToBack( xCommandQueue, &parsed, portMAX_DELAY );
+#else
 				XY->gotoxy({0, 0}, true, 0, SPEEDACCEL);
+#endif
 				printOK();
 				break;
 			case goxy:
 
 				// TODO multiple XY could be batched together for faster movement without decelerating between
-				// if movement direction similar enough. -- would need quite a long queue.
+				// if movement direction similar enough. -- would need quite a long queue and big changes.
 
 				// likely not for this project
 
@@ -382,14 +393,70 @@ static void vGCode(void *pvParameters ){
 				}
 				// scale factor?
 
+#ifdef COMMANDQ
+				parsed.pos.x = (parsed.pos.x*100)/xfact;
+				parsed.pos.y = (parsed.pos.y*100)/yfact;
+				xQueueSendToBack( xCommandQueue, &parsed, portMAX_DELAY );
+#else
 				starttime = xTaskGetTickCount();
 				XY->gotoxy({(parsed.pos.x*100)/xfact, (parsed.pos.y*100)/yfact}, true, 0, SPEEDACCEL); // always absolute value.
 				runtime = xTaskGetTickCount()-starttime;
 				snprintf(gcode, 79,  "Move took %ld ms\r\n",runtime );
 				uart->write(gcode);
-
-
+#endif
 				printOK();
+				break;
+			case bad:
+			case none:
+			default:
+				break;
+	    };
+	    vTaskDelay(2); // stop mdraw crashing on receiving OK too fast..
+	}
+}
+
+
+#ifdef COMMANDQ
+static void vPlot(void *pvParameters ){
+
+	// scaling values by extra 100 allows integer division without losing accuracy to needed precision.
+
+	uint32_t starttime;
+	uint32_t runtime;
+
+	command parsed;
+
+	while (1)
+	{
+		xQueueReceive(xCommandQueue, &parsed, portMAX_DELAY);
+	    switch ( parsed.cmd )
+	    {
+// messages expecting explicit reply rather than OK, or data saving.
+			case init:
+				break;
+			case limit:
+				break;
+			case savepen: // request to save new pen up/down positions.
+				break;
+
+			case savestepper: // request to save new drawing area sizes/speed/etc.
+				break;
+			case setpen:
+				Draw->setPen( parsed.pen.pos );
+				break;
+			case setlaser:
+				Draw->setLaser(parsed.laser.power );
+				break;
+			case origin:
+				XY->gotoxy({0, 0}, true, 0, SPEEDACCEL);
+				break;
+			case goxy:
+				starttime = xTaskGetTickCount();
+				XY->gotoxy({parsed.pos.x, parsed.pos.y}, true, 0, SPEEDACCEL); // always absolute value.
+				runtime = xTaskGetTickCount()-starttime;
+				char str[80];
+				snprintf(str, 79,  "Move took %ld ms\r\n",runtime );
+				uart->write(str);
 				break;
 			case bad:
 			case none:
@@ -397,9 +464,9 @@ static void vGCode(void *pvParameters ){
 				break;
 
 	    };
-//	    vTaskDelay(10); // add in a small artificial delay to pretend doing something;
 	}
 }
+#endif
 
 
 static void vLED(void *pvParameters)
@@ -423,7 +490,7 @@ static void vLED(void *pvParameters)
 				xSemaphoreTake(xAllowMotor, portMAX_DELAY);
 				holdingmutex=true;
 			}
-		} else
+		} else // no limit switches active, hand along motor control mutex.
 		{
 			if ( holdingmutex )
 			{
@@ -432,7 +499,7 @@ static void vLED(void *pvParameters)
 			}
 		}
 
-		Blue->toggle(); // show motor movement on led.
+		Blue->toggle();
 		vTaskDelay(200);
 	}
 
@@ -583,15 +650,24 @@ int main(void) {
 #endif
 	// higher level usb uart input
 	xTaskCreate(vInput, "MDraw Input",
-				300, NULL, (tskIDLE_PRIORITY + 3UL),
+				250, NULL, (tskIDLE_PRIORITY + 3UL),
 				(TaskHandle_t *) NULL);
 
 	xTaskCreate(vGCode, "GCode Parser",
-				300, NULL, (tskIDLE_PRIORITY + 4UL),
+				250, NULL, (tskIDLE_PRIORITY + 4UL),
 				(TaskHandle_t *) NULL);
 
-	xTaskCreate(vLED, "Limit Switch Read", // lowest priority task, only visual indication.
-			100, NULL, (tskIDLE_PRIORITY + 2UL),
+#ifdef COMMANDQ
+    xCommandQueue = xQueueCreate( 40, sizeof( command ) );
+    vQueueAddToRegistry( xCommandQueue, "Plotting commands Queue" );
+
+	xTaskCreate(vPlot, "Plotter mover task.",
+				250, NULL, (tskIDLE_PRIORITY + 4UL),
+				(TaskHandle_t *) NULL);
+#endif
+
+	xTaskCreate(vLED, "LED Handling", // lowest priority task, only visual indication.
+			60, NULL, (tskIDLE_PRIORITY + 2UL),
 			(TaskHandle_t *) NULL);
 
 	vTaskStartScheduler();

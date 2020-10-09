@@ -12,6 +12,8 @@
 #include <string.h>
 #include "I2C.h"
 
+#define STOPLASER
+
 void DrawControl::setPenUpDown(uint8_t penup, uint8_t pendown) {
 
 	this->penup = penup;
@@ -169,11 +171,14 @@ DrawControl::~DrawControl() {
 void DrawControl::setLaser( uint8_t power )
 {
 	curlaser = power;
+#ifdef STOPLASER
 	if ( ! outofbounds && inmotion )
 	{
+#endif
 		intsetLaser(power);
+#ifdef STOPLASER
 	}
-
+#endif
 }
 
 void DrawControl::intsetLaser( uint8_t power )
@@ -214,6 +219,7 @@ bool DrawControl::slowDraw()
 
 void DrawControl::ismoving( bool moving ) // ensure laser is only on when actually moving.
 {
+#ifdef STOPLASER
 	if ( moving )
 	{
 		inmotion = true;
@@ -227,7 +233,6 @@ void DrawControl::ismoving( bool moving ) // ensure laser is only on when actual
 		inmotion = false;
 		intsetLaser( 0 );
 	}
-
-
+#endif
 }
 

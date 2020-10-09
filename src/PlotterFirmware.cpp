@@ -10,10 +10,11 @@
 
 // define movement setup.
 #define SPEEDSLOW  		  (1000)
-#define SPEEDPEN		  (2000)
+#define SPEEDPEN		  (2000)  // if this is bigger than slow, pen will be allowed to accelerate during drawing to this speed.
 #define SPEEDFAST  		  (3800) // faster was breaking sim on 1/8 step long moves..
 #define SPEEDACCEL		  (2000) // acceleration in rpm/s^2
-#define STEPS_PER_REV     (400)
+#define STEPS_PER_REV     (400) // set depending on step size, 200=full steps, 400 half, 800 quarter, 1600 1/8th 3200 1/16th
+// these values should all really be in EEPROM and not hard coded, but would need M command to set them.
 
 #define COMMANDQ
 

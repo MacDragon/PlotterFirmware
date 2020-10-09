@@ -65,6 +65,7 @@ void vConfigureTimerForRunTimeStats( void ) {
 SemaphoreHandle_t xUARTMutex;
 EventGroupHandle_t xInit;
 SemaphoreHandle_t xAllowMotor;
+SemaphoreHandle_t xQueueEmpty;
 
 LpcUart * uart;
 
@@ -309,6 +310,7 @@ static void vGCode( const char * input) {
 	    {
 // messages expecting explicit reply rather than OK, or data saving.
 			case init:
+				xSemaphoreTake(xQueueEmpty, portMAX_DELAY);
 				snprintf(gcode, 79,  "M10 XY %ld %ld 0.00 0.00 A%d B%d H0 S%d U%d D%d\r\n",
 						EEProm->getXSize(),
 						EEProm->getYSize(),
@@ -320,25 +322,31 @@ static void vGCode( const char * input) {
 						);
 
 				printGCode(gcode);
+				xSemaphoreGive(xQueueEmpty);
 	//			printOK(); // no OK on M10?
 				break;
 			case limit:
+				xSemaphoreTake(xQueueEmpty, portMAX_DELAY);
 				snprintf(gcode, 79,  "M11 %d %d %d %d\r\n",
 						!Limit1->read(),
 						!Limit2->read(),
 						!Limit3->read(),
 						!Limit4->read());
 				printGCode(gcode);
+				xSemaphoreGive(xQueueEmpty);
 	//			printOK(); // no OK on M11?
 				break;
 			case savepen: // request to save new pen up/down positions.
+				xSemaphoreTake(xQueueEmpty, portMAX_DELAY);
 				EEProm->setPen(parsed.penstore.up, parsed.penstore.down);
 				Draw->setPenUpDown(parsed.penstore.up, parsed.penstore.down);
 				ITM_write("Pen data saved.\n");
 				printOK();
+				xSemaphoreGive(xQueueEmpty);
 				break;
 
 			case savestepper: // request to save new drawing area sizes/speed/etc.
+				xSemaphoreTake(xQueueEmpty, portMAX_DELAY);
 				EEProm->setStepper(parsed.stepper.A,
 						parsed.stepper.B,
 						parsed.stepper.width,
@@ -357,6 +365,7 @@ static void vGCode( const char * input) {
 				XY->setInvert((parsed.stepper.A==0)?false:true, (parsed.stepper.B==0)?false:true);
 
 				printOK();
+				xSemaphoreGive(xQueueEmpty);
 				break;
 			case setpen:
 #ifdef COMMANDQ
@@ -404,7 +413,7 @@ static void vGCode( const char * input) {
 				// scale factor?
 
 #ifdef COMMANDQ
-				parsed.pos.x = (parsed.pos.x*100)/xfact;
+				parsed.pos.x = (parsed.pos.x*100)/xfact; // calculate actual stepper movements and put in queue
 				parsed.pos.y = (parsed.pos.y*100)/yfact;
 				xQueueSendToBack( xCommandQueue, &parsed, portMAX_DELAY );
 #else
@@ -438,7 +447,12 @@ static void vPlot(void *pvParameters ){
 
 	while (1)
 	{
-		xQueueReceive(xCommandQueue, &parsed, portMAX_DELAY);
+		if ( ! xQueueReceive(xCommandQueue, &parsed, 0) )
+		{
+			xSemaphoreGive(xQueueEmpty); // we didn't receive from queue, send empty semaphore.
+			xQueueReceive(xCommandQueue, &parsed, portMAX_DELAY); // then go back to waiting for queue.
+			xSemaphoreTake(xQueueEmpty, portMAX_DELAY);
+		}
 	    switch ( parsed.cmd )
 	    {
 // messages expecting explicit reply rather than OK, or data saving.
@@ -474,6 +488,7 @@ static void vPlot(void *pvParameters ){
 				break;
 
 	    };
+
 	}
 }
 #endif
@@ -669,7 +684,9 @@ int main(void) {
 #endif
 
 #ifdef COMMANDQ
-    xCommandQueue = xQueueCreate( 40, sizeof( command ) );
+	xQueueEmpty = xSemaphoreCreateMutex();
+
+    xCommandQueue = xQueueCreate( 40, sizeof( command ) ); // bigger the queue further ahead command processing allowed to get
     vQueueAddToRegistry( xCommandQueue, "Plotting commands Queue" );
 
 	xTaskCreate(vPlot, "Plotter mover task.",

@@ -37,6 +37,7 @@ struct MotorConfig {
 	PinMap limit4;
 	uint32_t steps;
 	uint32_t ppsslow;
+	uint32_t ppsmedium;
 	uint32_t ppsfast;
 	uint32_t accelrpm;
 	bool   invertx = false;
@@ -65,7 +66,7 @@ public:
 	int32xy_t gotomid();
 
 	// set speed for plotting and moving
-	void setPPS(int32_t ppsslow, int32_t ppsfast);
+	void setPPS(int32_t ppsslow, int32_t ppsmedium, int32_t ppsfast );
 
 	// set stepper direction for M5
 	void setInvert( bool xinv, bool yinv );
@@ -88,7 +89,7 @@ public:
 	void isr(portBASE_TYPE *hpw);
 
 private:
-	uint32_t drawslow();
+	uint32_t drawspeed();
 
 	// recovery from limit switch no longer needed except for internal initialisation routine, now private.
 	int32xy_t dorecovery( XYdir xdirection, XYdir ydirection ); // recovery from direction in movement direction.
@@ -191,6 +192,7 @@ private:
 	bool ymotor; // is y motor present, or are we using a single stepper track for testing.
 
 	uint32_t ppsslow;
+	uint32_t ppsmedium;
 	uint32_t ppsfast;
 	uint32_t accelrpm;
 

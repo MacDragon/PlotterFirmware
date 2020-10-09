@@ -652,7 +652,7 @@ int32xy_t MotorXY::gotoxy( int32xy_t move, bool absolute, uint32_t speed, bool l
     	move.y = 0;
     }
 
-	if ( speed == 0 ) speed = drawslow(); // set default speed, slow if pen down.
+	if ( speed == 0 ) speed = drawspeed(); // set default speed, slow if pen down.
 
 	int32xy_t startpos = virtpos;
 
@@ -810,8 +810,9 @@ int32xy_t MotorXY::gotomid() {
 	return moved;
 }
 
-void MotorXY::setPPS(int32_t ppsslow, int32_t ppsfast ) {
+void MotorXY::setPPS(int32_t ppsslow, int32_t ppsmedium, int32_t ppsfast ) {
 	this->ppsslow = ppsslow;
+	this->ppsmedium = ppsmedium;
 	this->ppsfast = ppsfast;
 }
 
@@ -847,13 +848,15 @@ int MotorXY::getheight() {
 MotorXY::~MotorXY() {
 }
 
-uint32_t MotorXY::drawslow()
+uint32_t MotorXY::drawspeed()
 {
 	if (draw == nullptr ) return ppsfast; // we don't have draw control, assume draw fast.
 	else
 	{
-		if ( draw->slowDraw() )
+		if ( draw->drawSpeed() == 1 )
 			return ppsslow;
+		if ( draw->drawSpeed() == 2 )
+			return ppsmedium;
 		else
 			return ppsfast;
 	}
@@ -1096,6 +1099,7 @@ MotorXY::MotorXY(const MotorConfig &cfg, DrawControl *Draw, LpcUart *UART ) {
 
 
 	ppsslow = cfg.ppsslow; // set default safe speed at init.
+	ppsmedium = cfg.ppsmedium;
 	ppsfast = cfg.ppsfast;
 	accelrpm = cfg.accelrpm;
 

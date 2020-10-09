@@ -30,7 +30,7 @@ public:
 
 	void SetOutofbounds( bool outside ); // move pen up temporarily.
 
-	bool slowDraw(); // query whether to draw slow ( laser engaged )
+	uint8_t drawSpeed(); // query whether to draw slow ( laser engaged )
 
 	void ismoving( bool moving );
 

@@ -209,12 +209,14 @@ void DrawControl::intsetLaser( uint8_t power )
 	LPC_SCT1 -> CTRL_L &= ~((1 << 2) + (1 << 3));
 }
 
-bool DrawControl::slowDraw()
+uint8_t DrawControl::drawSpeed()
 {
-	if ( curlaser >= 1 || curpenpos <= pendown) // laser is enabled, return draw slow.  // curpenpos < penup removed for pen.
-		return true;
+	if ( curlaser >= 1 ) // laser is enabled, return draw slow.  // curpenpos < penup removed for pen.
+		return 1;
+	else if ( curpenpos <= pendown )
+		return 2;
 	else
-		return false;
+		return 0;
 }
 
 void DrawControl::ismoving( bool moving ) // ensure laser is only on when actually moving.

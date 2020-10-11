@@ -242,6 +242,9 @@ void MotorXY::write(const char *str) {
 int32xy_t MotorXY::RIT_start(int count1, int count2, int usstart, int usmax, uint32_t accel, bool skipaccel ) {
 	// Determine approximate compare value based on clock rate and passed interval
 
+	static uint32_t lastaccel=0;
+	static uint32_t RIT_curaccstored=0;
+
 	RIT_begin = (uint64_t) Chip_Clock_GetSystemClockRate() * (uint64_t) ( usstart /2 ) / 1000000;
 	RIT_end = (uint64_t) Chip_Clock_GetSystemClockRate() * (uint64_t) ( usmax / 2 ) / 1000000;
 
@@ -261,8 +264,16 @@ int32xy_t MotorXY::RIT_start(int count1, int count2, int usstart, int usmax, uin
 	{
 		RIT_accelrate = true; // using a true curve to achieve actual linear acceleration.
 
-		RIT_cur = RIT_begin; 											// constant to go from rpm/s to rad/s^2
-		RIT_curacc = ( 0.676*Chip_Clock_GetSystemClockRate()*sqrt(( 2*degToRad(360.0/stepsperrev) )/( accel * 0.1047197551143) ) ) / 2;
+		RIT_cur = RIT_begin;
+
+		if ( lastaccel != accel ) // don't do expensive floating point calcs more than once unless acceleration value changed.
+		{
+			lastaccel = accel;																					// constant to go from rpm/s to rad/s^2
+			RIT_curaccstored = ( 0.676*Chip_Clock_GetSystemClockRate()*sqrt(( 2*degToRad(360.0/stepsperrev) )/( accel * 0.1047197551143) ) ) / 2;
+		}
+
+		RIT_curacc = RIT_curaccstored;
+
 		RIT_cur32 = RIT_curacc << 8;
 		RIT_denom = 1;
 		RIT_accstate = RAMP_UP;
@@ -937,7 +948,8 @@ int32xy_t MotorXY::plotLine(int32xy_t posstart, int32xy_t posend, bool inside)
 	return {linexpos, lineypos}; // return our new position, whether at end of move or where we've reached in bounds.
 }
 
-int32xy_t MotorXY::dorecovery( XYdir xdirection, XYdir ydirection ) // recovery from direction in movement direction.
+// recovery from direction in movement direction when on limit switch, only needed during init.
+int32xy_t MotorXY::dorecovery( XYdir xdirection, XYdir ydirection )
 {
 //	xSemaphoreTake(xAllowMotor);
 

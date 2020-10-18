@@ -133,14 +133,12 @@ void DrawControl::setPen( uint8_t position )
 
 void DrawControl::intsetPen( uint8_t position )
 {
-//	LPC_SCT0 -> CTRL_L |= (1 << 2);
 	uint16_t match = (((1000*100)/(255)*(position))/100); // use large numbers for better scaling.
 	if ( match > 996 )
 		match = 1000; // ensure we actually get a 100% position.
 
 	LPC_SCT0 -> MATCHREL[1].L = 1000 + match;
 
-//	LPC_SCT0 -> CTRL_L &= ~(1 << 2);
 	vTaskDelay(100); // allow time for pen to move.
 }
 

@@ -307,7 +307,7 @@ int32xy_t MotorXY::RIT_start(int count1, int count2, int usstart, int usmax, uin
 
 	RIT_HalfCount = (count1 + 1) >> 1; // midpoint, rounded up, to ensure acceleration stops by here so we can still decelerate.
 
-    RIT_D = (2 * count2) - count1;
+    RIT_D = (2 * count2) - count1; // setup bresentham for secondary axis.
 
 	// enable automatic clear on when compare value==timer value
 	// this makes interrupts trigger periodically

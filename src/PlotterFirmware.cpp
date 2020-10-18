@@ -306,7 +306,7 @@ static void vGCode( const char * input) {
 	    command parsed = GCodeParser(input);
 #endif
 	    uint32_t ticktime = DWT->CYCCNT - starttick;
-	    snprintf(gcode, 79, " : parse took %ld cycles\r\n", ticktime);
+	    snprintf(gcode, 79, " : parse took %ld cycles, %ld messages in queue\r\n", ticktime, uxQueueMessagesWaiting( xCommandQueue ) );
 	    uart->write(gcode);
 	    switch ( parsed.cmd )
 	    {
@@ -689,7 +689,7 @@ int main(void) {
 #ifdef COMMANDQ
 	xQueueEmpty = xSemaphoreCreateMutex();
 
-    xCommandQueue = xQueueCreate( 40, sizeof( command ) ); // bigger the queue further ahead command processing allowed to get
+    xCommandQueue = xQueueCreate( 10, sizeof( command ) ); // bigger the queue further ahead command processing allowed to get
     vQueueAddToRegistry( xCommandQueue, "Plotting commands Queue" );
 
 	xTaskCreate(vPlot, "Plotter mover task.",

@@ -190,7 +190,6 @@ void DrawControl::intsetLaser( uint8_t power )
 
 	    LPC_SCT1->OUT[1].SET = (1 << 2); // event 2 will set SCTx_OUT1
 		LPC_SCT1->MATCHREL[1].L = match;
-		LPC_SCT1 -> CTRL_L &= ~((1 << 2) + (1 << 3)); // restart timer
 	} else
 	{
 		if ( simulator ) // set power to 2% on simulator so that detects faster, rather than true off.
@@ -198,16 +197,14 @@ void DrawControl::intsetLaser( uint8_t power )
 			uint16_t match = 20;
 		    LPC_SCT1->OUT[1].SET = (1 << 2); // event 2 will set SCTx_OUT1
 			LPC_SCT1->MATCHREL[1].L = match;
-			LPC_SCT1 -> CTRL_L &= ~((1 << 2) + (1 << 3)); // restart timer so sim still sees a %
 		} else
 		{
 		    LPC_SCT1->OUT[1].SET = 0; // event 3 has no effect on  SCTx_OUT1 --> laser is always off
 			LPC_SCT1->MATCHREL[1].L = 1;
-			LPC_SCT1->OUTPUT = 0; // set output to 0 and don't restart timer, ensures there's no small glitches.
 		}
 	}
 	// clear and restart timer
-
+	LPC_SCT1 -> CTRL_L &= ~((1 << 2) + (1 << 3));
 }
 
 uint8_t DrawControl::drawSpeed()

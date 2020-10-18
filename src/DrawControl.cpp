@@ -199,7 +199,7 @@ void DrawControl::intsetLaser( uint8_t power )
 			LPC_SCT1->MATCHREL[1].L = match;
 		} else
 		{
-		    LPC_SCT1->OUT[1].SET = 0; // event 3 has no effect on  SCTx_OUT1 --> laser is always off
+		    LPC_SCT1->OUT[1].SET = 0; // event 1 has no effect on  SCTx_OUT1 --> laser is always off
 			LPC_SCT1->MATCHREL[1].L = 1;
 		}
 	}
